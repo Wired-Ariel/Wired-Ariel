@@ -1,0 +1,3222 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gen3-poke-multiplayer — Mappa live</title>
+<link rel="icon" href="img/favicon.png">
+<!--
+  La mappa live del pannello (pannello.py la serve su 127.0.0.1).
+
+  Stessa regola di pannello.html: NIENTE RISORSE ESTERNE. Font di sistema,
+  immagini da net/img/ e da net/mappa/ (generate da tools/gen_mappa.py).
+
+  Resa grafica: design del 2026-08-22, adattato. Rispetto a quello, qui ci
+  sono in piu':
+    - LE PORTE: ogni warp e' un'icona cliccabile che apre l'interno, e dentro
+      l'icona verde riporta fuori. Se le porte in un punto sono piu' d'una, il
+      clic apre un elenco invece di scegliere per te.
+    - le icone VERE degli strumenti (graphics/items/icons della decomp), MT
+      comprese, con la palette per tipo che usa il gioco;
+    - la scheda dell'allenatore: il suo sprite del campo, e la squadra con lo
+      sprite anteriore ANIMATO (anim_front.png e' 64x128, cioe' due
+      fotogrammi: e' l'animazione vera del gioco) e il livello;
+    - italiano/inglese con i nomi UFFICIALI letti dalla cartuccia italiana
+      (tools/nomi_it.py). Niente traduzioni inventate: dove la ROM non ha una
+      stringa - i nomi delle stanze interne, per esempio - resta l'inglese.
+-->
+<style>
+  :root {
+    --verde-cupo: #0f3428;
+    --verde: #0f6b4a;
+    --verde-vivo: #16a06e;
+    --verde-chiaro: #3fd68f;
+    --carta: #f2ede1;
+    --scheda: #fffdf7;
+    --bordo: #dfd7c4;
+    --bordo-scuro: #cbc3b0;
+    --inchiostro: #16211c;
+    --tenue: #6b7269;
+    --tenue2: #8b9189;
+    --ambra: #c07a12;
+    --rosso: #b3392f;
+    --azzurro: #2f6bc0;
+    --viola: #7a58c0;
+    --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font: 15px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    color: var(--inchiostro); background: var(--carta);
+  }
+  img.px, img.ic, img.spr, img.itm { image-rendering: pixelated; }
+
+  /* ---------------------------------------------------------- testa */
+  header {
+    position: relative; overflow: hidden; flex: none;
+    background: var(--verde-cupo); color: #eaf5ee; padding: 13px 0 14px;
+  }
+  header .erba, header .velo { position: absolute; inset: 0; }
+  header .erba {
+    background: url(img/tile-erba-alta.png) 0 0/96px 96px repeat;
+    image-rendering: pixelated; opacity: .9;
+  }
+  header .velo {
+    background: linear-gradient(100deg, rgba(8,26,20,.92) 0%, rgba(8,26,20,.78) 55%, rgba(8,26,20,.52) 100%);
+  }
+  header .dentro {
+    position: relative; padding: 0 20px;
+    display: flex; align-items: center; gap: 15px;
+  }
+  .marchio {
+    position: relative; width: 44px; height: 44px; flex: none;
+    border-radius: 11px; overflow: hidden; border: 2px solid #08211a;
+    box-shadow: 0 6px 16px rgba(0,0,0,.35);
+  }
+  .marchio .fondo {
+    position: absolute; inset: 0;
+    background: url(img/tile-erba-alta.png) 0 0/24px 24px repeat;
+    image-rendering: pixelated;
+  }
+  .marchio .o1 { position: absolute; left: 4px; bottom: 4px; width: 20px; height: 20px; }
+  .marchio .o2 { position: absolute; right: 3px; top: 3px; width: 17px; height: 17px; }
+  header h1 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+  header .sub { margin: 2px 0 0; font-size: 12.5px; color: rgba(234,245,238,.74); }
+  .targhe { margin-left: auto; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .targa {
+    display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px;
+    border-radius: 9px; background: rgba(255,255,255,.1);
+    border: 1px solid rgba(255,255,255,.16);
+    font: 12px/1 var(--mono); color: #bfe2cd; white-space: nowrap;
+  }
+  .targa b { font-weight: 700; color: #eaf5ee; }
+  .targa .led { width: 7px; height: 7px; border-radius: 50%; background: var(--verde-chiaro); }
+  a.torna {
+    display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px;
+    border-radius: 9px; background: rgba(255,255,255,.94); border: 1px solid #0a2a20;
+    color: #10382a; font-size: 12.5px; font-weight: 700; text-decoration: none;
+  }
+  a.torna:hover { background: #fff; }
+
+  /* interruttore lingua */
+  .lingua { display: flex; height: 32px; border-radius: 9px; overflow: hidden;
+            border: 1px solid rgba(255,255,255,.22); }
+  .lingua button {
+    height: 100%; padding: 0 11px; border: 0; background: rgba(255,255,255,.08);
+    color: #bfe2cd; font: 700 12px/1 var(--mono); cursor: pointer;
+  }
+  .lingua button.on { background: #eaf5ee; color: #10382a; }
+
+  /* --------------------------------------------------------- telaio */
+  #app { display: flex; height: 100%; flex-direction: column; }
+  #corpo { display: flex; flex: 1; min-height: 0; }
+
+  #lato {
+    width: 388px; min-width: 320px; flex: none;
+    background: var(--carta); border-right: 1px solid var(--bordo-scuro);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #fisso { flex: none; }
+  #scroll { flex: 1; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+  #scroll::-webkit-scrollbar { width: 10px; }
+  #scroll::-webkit-scrollbar-thumb { background: #d6cdb8; border-radius: 6px; border: 3px solid var(--carta); }
+
+  .sez {
+    background: var(--scheda); border: 1px solid var(--bordo); border-radius: 14px;
+    padding: 12px 14px 14px; margin: 10px 10px 0;
+    box-shadow: 0 1px 2px rgba(20,30,24,.05);
+  }
+  #scroll .sez:last-child { margin-bottom: 10px; }
+  .sez h2 {
+    margin: 0 0 9px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .14em; color: var(--tenue2);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sez h2 .conta { margin-left: auto; font: 11px/1 var(--mono); color: var(--tenue2); text-transform: none; letter-spacing: 0; }
+  .riga { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  input[type=text], select {
+    width: 100%; height: 36px; padding: 0 10px;
+    border: 1px solid var(--bordo); border-radius: 10px; background: #fff;
+    font: 13px/1 var(--mono); color: var(--inchiostro);
+  }
+  input:focus, select:focus { outline: 2px solid var(--verde-vivo); outline-offset: 1px; }
+
+  .interruttori { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 9px; }
+  label.ck {
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    height: 30px; padding: 0 8px; border: 1px solid var(--bordo);
+    border-radius: 9px; background: #fff; font-size: 12px; color: #3b463f;
+  }
+  label.ck:hover { background: #fffaf0; }
+  label.ck input { accent-color: var(--verde); margin: 0; }
+  label.ck:has(input:checked) { border-color: #cfe3d6; background: #f3faf5; color: #0b4d36; font-weight: 600; }
+
+  button {
+    height: 32px; padding: 0 12px; border: 1px solid var(--bordo-scuro);
+    border-radius: 9px; background: #fff; color: #3b463f;
+    font: 600 12.5px/1 inherit; font-family: inherit; cursor: pointer;
+  }
+  button:hover { background: #f5f0e3; }
+
+  /* segmenti (Mappe / Pokémon / Allenatori) */
+  .segm { display: flex; gap: 0; border: 1px solid var(--bordo); border-radius: 10px; overflow: hidden; background: #fff; }
+  .segm button {
+    flex: 1; height: 32px; border: 0; border-radius: 0; background: #fff;
+    font: 600 12px/1 inherit; color: var(--tenue); border-right: 1px solid var(--bordo);
+  }
+  .segm button:last-child { border-right: 0; }
+  .segm button.on { background: var(--verde); color: #fff; }
+
+  /* ------------------------------------------------------- giocatori */
+  .giocatore {
+    display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+    border-radius: 10px; background: #f7f3e8; font-size: 12.5px;
+    margin-bottom: 6px; line-height: 1.35;
+  }
+  .giocatore:last-child { margin-bottom: 0; }
+  .giocatore .pallino { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(0,0,0,.08); }
+  .vuoto { font-size: 12.5px; color: var(--tenue); line-height: 1.5; }
+
+  /* --------------------------------------------------------- legenda */
+  .legenda { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+  .legenda span { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--tenue); }
+  .legenda i { width: 12px; height: 12px; border-radius: 50%; flex: none; display: inline-block; }
+  .legenda i.q { border-radius: 3px; }
+  .legenda img.itm { width: 18px; height: 18px; flex: none; }
+
+  /* ----------------------------------------------------------- liste */
+  details.sez > summary {
+    list-style: none; cursor: pointer;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .14em; color: var(--tenue2);
+  }
+  details.sez > summary::-webkit-details-marker { display: none; }
+  details.sez > summary::after { content: " \25BE"; }
+  details.sez[open] > summary::after { content: " \25B4"; }
+
+  ul.lista {
+    list-style: none; margin: 9px 0 0; padding: 0; max-height: 210px; overflow: auto;
+    border: 1px solid var(--bordo); border-radius: 10px; background: #fff;
+  }
+  ul.lista:empty { display: none; }
+  ul.lista li {
+    padding: 5px 9px; cursor: pointer; font-size: 13px;
+    border-bottom: 1px solid #f0ebdd; display: flex; align-items: center;
+    justify-content: space-between; gap: 8px;
+  }
+  ul.lista li:last-child { border-bottom: 0; }
+  ul.lista li:hover { background: #f3faf5; }
+  ul.lista li .muto { font: 11px/1 var(--mono); color: var(--tenue2); white-space: nowrap; }
+  ul.lista li .sx { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  ul.lista li .sx span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ------------------------------------------------------ dettagli */
+  .muto { color: var(--tenue); font-size: 12px; }
+  #dett h3 {
+    display: flex; align-items: center; gap: 9px;
+    margin: 0 0 3px; font-size: 16px; font-weight: 700; letter-spacing: -.01em;
+  }
+  #dett h4 {
+    margin: 14px 0 4px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .12em; color: var(--tenue2);
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  td, th { padding: 4px 5px; text-align: left; border-bottom: 1px solid #f0ebdd; vertical-align: middle; }
+  th {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--tenue2); border-bottom-color: var(--bordo);
+  }
+  td.n { text-align: right; font: 12px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
+  tr[data-k] td:first-child, tr[data-t] td:first-child { color: var(--verde); font-weight: 600; }
+  tr[data-k]:hover, tr[data-t]:hover { background: #f3faf5; cursor: pointer; }
+  img.ic { width: 30px; height: 30px; vertical-align: middle; }
+  img.itm { width: 22px; height: 22px; vertical-align: middle; }
+  .dono-chip { display: inline-flex; align-items: center; gap: 2px;
+               background: #efe7d2; border: 1px solid var(--bordo);
+               border-radius: 999px; padding: 2px 9px 2px 5px;
+               margin: 2px 4px 2px 0; font-size: 12.5px; line-height: 1.5;
+               white-space: nowrap; }
+  img.oe { image-rendering: pixelated; object-fit: contain; object-position: bottom; }
+
+  .torna-su {
+    display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px;
+    padding: 3px 9px; border-radius: 8px; border: 1px solid var(--bordo);
+    background: #fff; font-size: 12px; color: var(--tenue); cursor: pointer;
+  }
+  .torna-su:hover { background: #f3faf5; }
+
+  /* Il Pokemon animato, in due forme.
+     .monbw  la GIF di Nero/Bianco 2 (tools/sprite_bw.py): animazione vera,
+             decine di fotogrammi, e' quella che si vuole vedere.
+     .mon    il ripiego: lo sprite anteriore della decomp, 64x128 = due
+             fotogrammi, alternati qui sotto. Serve per le specie che lo
+             specchio non aveva. Le misure sono in percentuale apposta, cosi'
+             la stessa regola vale a 40 px come a 80. */
+  .monbw {
+    flex: none; object-fit: contain; object-position: center bottom;
+  }
+  .mon {
+    flex: none; image-rendering: pixelated;
+    background-repeat: no-repeat; background-size: 100% 200%;
+    animation: respiro 1.1s steps(1) infinite;
+  }
+  @keyframes respiro {
+    0%, 49.9% { background-position: 0 0; }
+    50%, 100% { background-position: 0 100%; }
+  }
+
+  /* la schedina accanto al personaggio cliccato */
+  #scheda {
+    position: absolute; display: none; z-index: 6; width: 264px;
+    background: var(--scheda); border: 1px solid var(--bordo-scuro); border-radius: 13px;
+    box-shadow: 0 16px 38px rgba(0,0,0,.45); overflow: hidden;
+  }
+  #scheda .testa {
+    display: flex; align-items: center; gap: 9px; padding: 9px 11px;
+    background: #f7f3e8; border-bottom: 1px solid var(--bordo);
+  }
+  #scheda .testa .cl { font-size: 11px; color: var(--tenue); line-height: 1.2; }
+  #scheda .testa .nm { font-size: 15px; font-weight: 700; line-height: 1.2; }
+  #scheda .testa .x {
+    margin-left: auto; align-self: flex-start; width: 20px; height: 20px; padding: 0;
+    border-radius: 6px; border: 1px solid var(--bordo); background: #fff;
+    font: 700 12px/1 var(--mono); color: var(--tenue); cursor: pointer;
+  }
+  #scheda .corpo { padding: 9px 11px 11px; }
+  #scheda .mons { display: flex; flex-wrap: wrap; gap: 6px; }
+  #scheda .mons .m { width: 74px; text-align: center; }
+  #scheda .mons .m .nm { font-size: 11px; font-weight: 600; line-height: 1.15; }
+  #scheda .mons .m .lv { font: 10.5px/1.3 var(--mono); color: var(--tenue2); }
+
+  /* il pannello a destra: i Pokemon della zona */
+  #pannello-dx {
+    position: absolute; display: none; z-index: 4;
+    right: 12px; top: 52px; bottom: 52px; width: 306px;
+    background: var(--scheda); border: 1px solid var(--bordo-scuro); border-radius: 13px;
+    box-shadow: 0 16px 38px rgba(0,0,0,.42);
+    display: none; flex-direction: column; overflow: hidden;
+  }
+  #pannello-dx.aperto { display: flex; }
+  #pannello-dx .testa {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    background: #f7f3e8; border-bottom: 1px solid var(--bordo); flex: none;
+  }
+  #pannello-dx .testa .nm { font-size: 14.5px; font-weight: 700; line-height: 1.2; }
+  #pannello-dx .testa .su { font-size: 11px; color: var(--tenue); }
+  #pannello-dx .testa .x {
+    margin-left: auto; width: 22px; height: 22px; padding: 0; border-radius: 6px;
+    border: 1px solid var(--bordo); background: #fff; font: 700 12px/1 var(--mono);
+    color: var(--tenue); cursor: pointer;
+  }
+  #pannello-dx .corpo { flex: 1; overflow-y: auto; padding: 10px 12px 14px; }
+  #pannello-dx .corpo::-webkit-scrollbar { width: 9px; }
+  #pannello-dx .corpo::-webkit-scrollbar-thumb { background: #d6cdb8; border-radius: 6px; border: 3px solid var(--scheda); }
+  #pannello-dx h5 {
+    margin: 12px 0 5px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .12em; color: var(--tenue2);
+  }
+  #pannello-dx h5:first-child { margin-top: 0; }
+  .zmon {
+    display: flex; align-items: center; gap: 9px; padding: 3px 5px;
+    border-radius: 9px; cursor: pointer;
+  }
+  .zmon:hover { background: #f3faf5; }
+  .zmon .chi { min-width: 0; flex: 1; }
+  .zmon .nm { font-size: 12.5px; font-weight: 600; line-height: 1.2; }
+  .zmon .dt { font: 11px/1.35 var(--mono); color: var(--tenue2); }
+  /* lo strumento tenuto dal selvatico */
+  .ten { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 3px; }
+  .t1 {
+    display: inline-flex; align-items: center; gap: 3px;
+    font: 10.5px/1.4 var(--mono); color: #6b5a1e;
+    background: #fdf4dd; border: 1px solid #e8ce8f; border-radius: 6px;
+    padding: 1px 5px 1px 3px;
+  }
+  .t1 img { width: 16px; height: 16px; }
+  .t1 b { color: var(--ambra); }
+  .zmon .pc {
+    font: 700 12px/1 var(--mono); color: var(--verde);
+    background: #eef7f1; border: 1px solid #cfe3d6; border-radius: 7px; padding: 4px 6px;
+  }
+  .squadra { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .mon-box {
+    width: 84px; text-align: center; padding: 4px 2px 6px;
+    border: 1px solid var(--bordo); border-radius: 10px; background: #fff;
+  }
+  .mon-box .nm { font-size: 11.5px; font-weight: 600; line-height: 1.2; }
+  .mon-box .lv { font: 11px/1.3 var(--mono); color: var(--tenue2); }
+  .mon-box .mon { margin: 0 auto; }
+
+  .cartellino {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border-radius: 11px; background: #f7f3e8; border: 1px solid var(--bordo);
+  }
+  .cartellino .chi { min-width: 0; }
+  .cartellino .cl { font-size: 11.5px; color: var(--tenue); }
+  .cartellino .nm { font-size: 15px; font-weight: 700; }
+
+  /* ------------------------------------------------------------ tela */
+  #tela-box {
+    flex: 1; position: relative; min-width: 0;
+    background:
+      radial-gradient(120% 90% at 50% 0%, rgba(63,214,143,.10) 0%, rgba(15,52,40,0) 60%),
+      var(--verde-cupo);
+  }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas.drag { cursor: grabbing; }
+  canvas.mano { cursor: pointer; }
+  #tip {
+    position: absolute; pointer-events: none; display: none; max-width: 300px;
+    background: var(--scheda); border: 1px solid var(--bordo-scuro); border-radius: 10px;
+    padding: 7px 11px; font-size: 12.5px; color: var(--inchiostro);
+    box-shadow: 0 8px 20px rgba(0,0,0,.28);
+  }
+  #stato {
+    position: absolute; left: 12px; bottom: 12px;
+    display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px;
+    background: rgba(9,30,23,.85); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 9px; font: 11.5px/1 var(--mono); color: #bfe2cd;
+  }
+  #zoom { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 6px; }
+  #zoom button {
+    width: 32px; height: 32px; padding: 0; border-radius: 9px;
+    background: rgba(9,30,23,.85); border: 1px solid rgba(255,255,255,.14);
+    color: #eaf5ee; font: 700 15px/1 var(--mono);
+  }
+  #zoom button:hover { background: rgba(22,160,110,.9); }
+
+  #nav { position: absolute; left: 12px; top: 12px; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); }
+  #nav button {
+    height: 30px; padding: 0 12px; border-radius: 9px;
+    background: rgba(9,30,23,.85); border: 1px solid rgba(255,255,255,.14);
+    color: #eaf5ee; font: 600 12px/1 inherit; font-family: inherit;
+  }
+  #nav button:hover { background: rgba(22,160,110,.9); }
+  #nav button.fuori { background: rgba(22,160,110,.88); border-color: rgba(255,255,255,.22); }
+  #nav .dove {
+    display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px;
+    background: rgba(9,30,23,.85); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 9px; font: 11.5px/1 var(--mono); color: #bfe2cd;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .nascosto { display: none !important; }
+
+  /* il menu che compare quando in un punto ci sono piu' porte */
+  #scelta {
+    position: absolute; display: none; z-index: 5; min-width: 210px; max-width: 320px;
+    background: var(--scheda); border: 1px solid var(--bordo-scuro); border-radius: 12px;
+    box-shadow: 0 14px 34px rgba(0,0,0,.4); overflow: hidden;
+  }
+  #scelta .tit {
+    padding: 7px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--tenue2); border-bottom: 1px solid var(--bordo);
+    background: #f7f3e8;
+  }
+  #scelta button {
+    display: flex; width: 100%; align-items: center; gap: 8px; height: auto;
+    padding: 8px 12px; border: 0; border-radius: 0; background: var(--scheda);
+    font-size: 13px; text-align: left; border-bottom: 1px solid #f0ebdd;
+  }
+  #scelta button:last-child { border-bottom: 0; }
+  #scelta button:hover { background: #f3faf5; }
+  #scelta i {
+    width: 16px; height: 16px; border-radius: 4px; flex: none; display: grid;
+    place-items: center; color: #fff; font-style: normal; font-size: 10px; font-weight: 800;
+  }
+
+  #avviso {
+    position: absolute; left: 50%; top: 26%; transform: translateX(-50%);
+    display: none; gap: 13px; align-items: flex-start; max-width: 560px;
+    background: #fdf4dd; border: 1px solid #e8ce8f; border-left: 5px solid var(--ambra);
+    border-radius: 12px; padding: 14px 18px; font-size: 14px; line-height: 1.55;
+    color: var(--inchiostro); box-shadow: 0 12px 30px rgba(0,0,0,.35);
+  }
+  #avviso.visibile { display: flex; }
+  #avviso .bang {
+    display: grid; place-items: center; width: 24px; height: 24px; flex: none;
+    border-radius: 50%; background: var(--ambra); color: #fff; font-weight: 800; font-size: 14px;
+  }
+  #avviso code { font: 12.5px/1.5 var(--mono); word-break: break-all; }
+
+  /* --------------------------------------------------- la guida del Safari */
+  .safari { font-size: 12.5px; line-height: 1.5; }
+  .safari p { margin: 7px 0; }
+  .safari h5 {
+    margin: 13px 0 4px; font-size: 11px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .09em; color: var(--verde);
+  }
+  .safari .rif { font: 10px/1 var(--mono); color: var(--tenue2); white-space: nowrap; }
+  .safari .sf1 { background: #eef6f1; border-left: 3px solid var(--verde-vivo); padding: 7px 10px; border-radius: 0 8px 8px 0; }
+  .safari .sfw { background: #fdf4dd; border-left: 3px solid var(--ambra); padding: 7px 10px; border-radius: 0 8px 8px 0; }
+  .safari .sfb { background: #fff4f2; border-left: 3px solid var(--rosso); padding: 7px 10px; border-radius: 0 8px 8px 0; }
+  .safari .sft { width: 100%; border-collapse: collapse; margin: 5px 0; font: 11.5px/1.5 var(--mono); }
+  .safari .sft th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--tenue2); font-weight: 700; }
+  .safari .sft td, .safari .sft th { padding: 2px 6px; border-bottom: 1px solid var(--bordo); }
+
+  /* =========================================================== MOBILE ======
+   * La mappa su telefono era inservibile: la barra laterale si prendeva il 46%
+   * dell'altezza e alla tela restava una striscia. I gesti c'erano gia' (pan a
+   * un dito, pinch a due): mancava lo spazio.
+   *
+   * Qui la tela diventa TUTTO lo schermo e il pannello laterale scende come un
+   * foglio dal basso, chiuso di default, che si apre col pulsante o
+   * trascinando la maniglia. Cosi' si guarda la mappa a schermo pieno e i
+   * dettagli si tirano su quando servono. */
+  #maniglia, #apri-lato { display: none; }
+
+  @media (max-width: 820px), (pointer: coarse) and (max-width: 1000px) {
+    #corpo { flex-direction: column; position: relative; }
+
+    #tela-box { order: 1; flex: 1 1 auto; min-height: 0; }
+
+    #lato {
+      order: 2; position: absolute; left: 0; right: 0; bottom: 0; z-index: 40;
+      width: 100%; height: 72vh; max-height: 72vh;
+      border-right: 0; border-top: 1px solid var(--bordo-scuro);
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -8px 28px rgba(10,25,18,.28);
+      transform: translateY(calc(100% - 46px));
+      transition: transform .22s ease;
+      touch-action: none;
+    }
+    #lato.su { transform: translateY(0); }
+
+    /* la maniglia: e' anche il bottone che apre e chiude */
+    #maniglia {
+      display: block; height: 46px; flex: none; cursor: grab;
+      border-radius: 16px 16px 0 0; background: var(--scheda);
+      border-bottom: 1px solid var(--bordo);
+    }
+    #maniglia::before {
+      content: ""; display: block; width: 42px; height: 4px; margin: 9px auto 0;
+      border-radius: 3px; background: var(--bordo-scuro);
+    }
+    #maniglia span {
+      display: block; text-align: center; font-size: 11.5px; font-weight: 700;
+      color: var(--tenue); margin-top: 5px;
+    }
+
+    #fisso { padding: 8px 12px; }
+    #scroll { padding: 0 12px 16px; }
+
+    /* i controlli in cima: due colonne invece di una riga che sborda */
+    #fisso .riga { flex-wrap: wrap; gap: 6px; }
+    #fisso input[type=search], #fisso select { min-width: 0; flex: 1 1 100%; }
+
+    /* bersagli grandi abbastanza per un dito (40 px e' il minimo sensato) */
+    #nav button, #zoom button, #interruttori label, #interruttori button,
+    #fisso button, #fisso label {
+      min-height: 40px; min-width: 40px; font-size: 14px;
+    }
+    #zoom { bottom: 56px; }
+    #stato { display: none; }         /* la riga tecnica non serve sul telefono */
+
+    header { padding: 10px 0 11px; }
+    header h1 { font-size: 17px; }
+    header .sub, .targhe { display: none; }
+    #tip { display: none; }           /* i tooltip col dito non hanno senso */
+  }
+
+  /* Telefoni stretti: la scheda a comparsa non deve mangiarsi tutto */
+  @media (max-width: 420px) {
+    #lato { height: 78vh; max-height: 78vh; }
+    .safari .sft { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="erba"></div>
+    <div class="velo"></div>
+    <div class="dentro">
+      <div class="marchio">
+        <div class="fondo"></div>
+        <img class="px o1" src="img/orma-treecko-scuro-bordo.png" alt="">
+        <img class="px o2" src="img/orma-torchic-scuro-bordo.png" alt="">
+      </div>
+      <div>
+        <h1 id="t-titolo">Mappa live</h1>
+        <p class="sub" id="t-sub">Hoenn disegnata dalla decomp · posizioni dal vivo dal pannello</p>
+      </div>
+      <div class="targhe">
+        <span class="targa"><b id="targa-mappe">—</b><span id="t-mappe">mappe</span></span>
+        <span class="targa"><b id="targa-specie">—</b><span id="t-specie">specie</span></span>
+        <span class="lingua"><button id="lang-it">IT</button><button id="lang-en">EN</button></span>
+        <span class="targa"><span class="led"></span>127.0.0.1:7411</span>
+        <a class="torna" href="/" id="t-torna">‹ Torna al pannello</a>
+      </div>
+    </div>
+  </header>
+
+  <div id="corpo">
+    <div id="lato">
+      <div id="maniglia" title="dettagli"><span id="t-maniglia">Dettagli</span></div>
+      <div id="fisso">
+        <div class="sez">
+          <h2 id="t-vista">Vista</h2>
+          <select id="sel-mondo"></select>
+          <div class="interruttori">
+            <label class="ck"><input type="checkbox" id="ck-strumenti" checked> <span id="t-ck-str">strumenti</span></label>
+            <label class="ck"><input type="checkbox" id="ck-personaggi" checked> <span id="t-ck-per">personaggi</span></label>
+            <label class="ck"><input type="checkbox" id="ck-porte" checked> <span id="t-ck-por">porte</span></label>
+            <label class="ck"><input type="checkbox" id="ck-nomi" checked> <span id="t-ck-nom">nomi</span></label>
+            <label class="ck"><input type="checkbox" id="ck-griglia"> <span id="t-ck-gri">griglia</span></label>
+            <button id="btn-fit" style="height:30px" title="">⤢</button>
+          </div>
+          <div class="riga" style="margin-top:9px">
+            <span style="font-size:12.5px;color:#3b463f" id="t-segui">Segui</span>
+            <select id="sel-segui" style="width:auto;flex:1"><option value="">—</option></select>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="scroll">
+        <div class="sez">
+          <h2 id="t-cerca">Cerca</h2>
+          <div class="segm">
+            <button class="on" data-c="mappe" id="t-c-mappe">Mappe</button>
+            <button data-c="specie" id="t-c-specie">Pokémon</button>
+            <button data-c="allenatori" id="t-c-all">Allenatori</button>
+          </div>
+          <input type="text" id="cerca" style="margin-top:9px" placeholder="">
+          <ul class="lista" id="risultati"></ul>
+        </div>
+
+        <div class="sez" id="dett-sez">
+          <h2 id="t-dettagli">Dettagli</h2>
+          <div id="dett"><span class="muto" id="t-vuoto"></span></div>
+        </div>
+
+        <div class="sez">
+          <h2 id="t-giocatori">Giocatori</h2>
+          <div id="giocatori"><span class="vuoto"></span></div>
+        </div>
+
+        <details class="sez" id="sez-legenda">
+          <summary id="t-legenda">Legenda</summary>
+          <div class="legenda" id="legenda" style="margin-top:10px"></div>
+        </details>
+      </div>
+    </div>
+
+    <div id="tela-box">
+      <canvas id="tela"></canvas>
+      <div id="tip"></div>
+      <div id="nav">
+        <button id="btn-indietro" class="nascosto">‹</button>
+        <span class="dove" id="nav-dove">—</span>
+        <button id="btn-esci" class="fuori nascosto">↑</button>
+      </div>
+      <div id="scelta"></div>
+      <div id="scheda"></div>
+      <div id="pannello-dx"></div>
+      <div id="stato">…</div>
+      <div id="zoom">
+        <button id="btn-meno">–</button>
+        <button id="btn-piu">+</button>
+      </div>
+      <div id="avviso"><span class="bang">!</span><span id="avviso-testo"></span></div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var T = 16;                           // pixel per tile
+  var dati = null, MAP_OFFSET = 7;
+  var vista = null;                     // {tipo:'mondo', id} | {tipo:'mappa', key}
+  var z = 0.5, cx = 0, cy = 0;
+  var immagini = {}, sprite = {}, oeImg = {}, itemImg = {};
+  var dirty = true;
+  var tela = $("tela"), ctx = tela.getContext("2d");
+  var mostraStrumenti = true, mostraNomi = true, mostraGriglia = false;
+  var mostraFeebas = true;   // i tile candidati di Feebas (Percorso 119)
+  var feebas6 = {};          // mapKey -> i 6 tile del calcolatore (in oro)
+  var feebasNoti = [];       // i tile dove l'utente HA GIA' pescato Feebas
+  var feebasProb = {};       // tile -> quanti semi candidati lo contengono
+  var feebasSeme = null;     // il seme usato, per la scheda
+  var mostraPersonaggi = true, mostraPorte = true;
+  var giocatori = [], evidenziate = {}, selezionata = null, segui = "";
+  var cronologia = [];
+  var modoCerca = "mappe";
+  var indiceAllenatori = null;
+
+  // Sei tipi di passaggio. `immersione`/`riemersione` sono le connessioni
+  // dive del gioco (piu' i setdivewarp fissi degli interni); `base` sono i
+  // 75 ingressi delle basi segrete, che portano a uno dei 24 interni.
+  var PORTA_COL = { entra: "#2f6bc0", esce: "#16a06e", interno: "#c07a12", altrove: "#7a58c0",
+                    immersione: "#0d8fb8", riemersione: "#35b7d8", base: "#8a6d3b" };
+  // I PASSAGGI INTERNI (i teletrasporti dentro la stessa mappa) hanno un
+  // colore loro: non ti portano altrove, ti spostano qui dentro.
+  var PORTA_STESSA_COL = "#b8567a";
+  var SIMBOLO_STESSA = String.fromCharCode(0x27F3);   // freccia circolare
+  var PORTA_FRECCIA = { entra: "\u2193", esce: "\u2191", interno: "\u21C5", altrove: "\u2192",
+                        immersione: "\u2913", riemersione: "\u2912", base: "\u2302" };
+
+  // --------------------------------------------------------------- lingua
+  // Le stringhe DELL'INTERFACCIA stanno qui; i nomi DEL GIOCO no: quelli
+  // arrivano dalla cartuccia (dati.it, generato da tools/nomi_it.py) e dove
+  // la ROM non ha una stringa resta l'inglese della decomp. Nessuna
+  // traduzione inventata, che era la condizione posta.
+  var UI = {
+    it: {
+      sub: "Hoenn disegnata dalla decomp · posizioni dal vivo dal pannello",
+      mappe: "mappe", specie: "specie", vista: "Vista", giocatori: "Giocatori",
+      cerca: "Cerca", dettagli: "Dettagli", legenda: "Legenda", segui: "Segui",
+      torna: "‹ Torna al pannello", fit: "Tutta la vista",
+      str: "strumenti", per: "personaggi", por: "porte", nom: "nomi", gri: "griglia",
+      cMappe: "Mappe", cSpecie: "Pokémon", cAll: "Allenatori",
+      phMappe: "Route 110, Borgo Radice, Centro…",
+      phSpecie: "Poochyena, Ralts, Feebas…",
+      phAll: "nome o classe: Bullo, Matteo…",
+      vuoto: "clicca qualcosa sulla mappa: una zona, un allenatore, uno strumento, una porta",
+      nessunG: "nessuna posizione ancora: il pannello deve avere la partita avviata (e il payload dentro il GBA)",
+      tu: "Tu (giocatore %s)", amico: "Amico %s", dalVivo: "dal vivo", fermo: "fermo da %s s",
+      strumenti: "Strumenti", nascosto: "nascosto", aTerra: "a terra", dono: "dono",
+      tieneT: "strumento che può tenere addosso (lo prendi con Furto/Scippo o catturandolo)",
+      allenatori: "Allenatori", chi: "chi", squadra: "squadra", tile: "tile",
+      personaggi: "Personaggi e oggetti", selvatici: "Pokémon selvatici", nessuno: "nessuno",
+      porte: "Porte", dove: "dove", come: "come", pct: "%", lv: "lv", tasso: "tasso",
+      entra: "Entra in", esce: "Esci verso", interno: "Vai a", altrove: "Vai a",
+      scegli: "Dove vuoi andare?", uscite: "Da dove esci?",
+      indietro: "‹ Indietro", esciB: "Esci ↑",
+      clicMappa: "clicca per aprirla", vaiQui: "vai qui sulla mappa",
+      evidenziate: "Le mappe evidenziate in giallo sono quelle dove si trova.",
+      luoghi: "luoghi", singola: "singola", nonConn: "non connessa", mondo: "mondo",
+      lvl: "Lv", niente: "nessun risultato", generato: "generato", albero: "Albero di",
+      nienteSquadra: "nessun Pokemon", nienteSelvatici: "qui non ci sono Pokemon selvatici",
+      datiNo: "Dati della mappa non trovati (%s). Vanno generati una volta, dalla cartella <b>overworld-link</b>:<br><code>python tools\\gen_mappa.py</code><br>poi ricarica la pagina.",
+      legEntra: "entra (casa, grotta)", legEsce: "esci all'aperto",
+      legInterno: "piano o stanza", legAltrove: "altra area",
+      legTerra: "strumento a terra", legNasc: "nascosto (rombo giallo)",
+      legDono: "dono di un personaggio", legAll: "allenatore (da lontano)",
+      legNpc: "altro personaggio", legTu: "tu", legAmico: "l'amico",
+      daVicino: "da vicino ognuno ha il suo sprite vero",
+      immersione: "Immergiti verso", riemersione: "Riemergi verso", base: "Base segreta:",
+      legImm: "immersione (acqua fonda)", legRiem: "riemersione", legBase: "base segreta",
+      legSub: "acqua fonda: ci si immerge qui", legFeebas: "tile candidati di Feebas",
+      legSat: "luogo staccato (bordo tratteggiato): la linea va alla porta da cui ci si arriva",
+      satNota: "Questo luogo il gioco non lo cuce al resto della regione: ci si arriva solo per porta. Qui e' messo accanto alla porta da cui si entra (il pallino giallo), non in una posizione dichiarata dal gioco.",
+      legFeebas6: "i TUOI 6 tile di Feebas (dal calcolatore)",
+      dinamica: "Uscita: si torna da dove sei entrato",
+      viaEvento: "non e' una porta fisica: in partita ci si arriva con un evento (sfida, traghetto, copione)",
+      stessaMappa: "passaggio interno: ti porta in un altro punto di questa stessa mappa",
+      satDa: "da",
+      sbarco: "si sbarca qui",
+      legSbarco: "dove ti lascia il traghetto",
+      miraggio: "L'ISOLA MIRAGGIO e' disegnata qui al centro del percorso, ma in partita si vede solo nei giorni in cui il numero segreto del giorno combacia con il personality di un Pokemon della tua squadra: quasi mai. Sull'isola crescono le Bacche Liegi e vive Wynaut.",
+      premio: "premio se lo batti", doppia: "lotta in coppia",
+      rivincite: "rivincite (%s squadre)", rivincita: "rivincita %s",
+      rivinciteNota: "Quando ti richiama col PokeNav rimette in campo una di queste squadre, non quella di prima.",
+      ricompensa: "dopo la lotta ti dà", mosse: "mosse", tiene: "tiene",
+      piuPunti: "lo stesso oggetto in %s punti vicini (contato una volta)",
+      cosaCella: "Cosa c'è qui?",
+      solo6: "solo sui 6 tile del sorteggio (vedi la nota Feebas)",
+      calcTitolo: "Calcolatore dei tile di Feebas",
+      calcSpiega: "I 6 tile veri dipendono dal TUO salvataggio: il gioco li sorteggia da un numero nascosto che accompagna la frase di tendenza di Bluruvia (la moda di cui parlano gli abitanti dell'isola). Carica qui il tuo file <b>.sav</b> (non esce dal browser: viene letto in locale) e la mappa colora d'oro i tuoi 6 tile.",
+      calcBottone: "Scegli il .sav…", calcSeme: "oppure seme (0-65535):",
+      calcFatto: "Fatto: i tuoi 6 tile sono in ORO sulla mappa (seme %s).",
+      calcErrore: "Questo file non sembra un salvataggio di Smeraldo valido.",
+      calcNota: "Attenzione: il seme cambia quando la frase di tendenza cambia (e dopo un mescolarecord). Se non trovi Feebas, ricarica un .sav aggiornato.",
+      calcDaTile: "Non hai il salvataggio sottomano? Dimmi dove hai GIA' pescato Feebas",
+      calcDaTileSpiega: "Funziona anche giocando su GBA vero: ogni tile dove Feebas e' uscito restringe le possibilita'. Con <b>3 tile</b> il seme diventa unico e ti dico gli altri; con 2 ne restano pochi e ti mostro dove conviene provare.",
+      calcAggiungi: "aggiungi", calcSvuota: "svuota",
+      calcTileNoti: "tile dove hai pescato Feebas:",
+      calcSemiUno: "Trovato: un solo seme possibile (%s). I tuoi 6 tile sono in ORO.",
+      calcSemiTanti: "%s semi ancora possibili. In oro i tile piu' probabili: prova li', poi aggiungi il tile dove esce e diventeranno esatti.",
+      calcSemiZero: "Nessun seme torna con questi tile: controlla le coordinate (si leggono passando il mouse sulla mappa).",
+      calcTileFuori: "Quel tile non e' fra i candidati di Feebas: Feebas li' non esce mai.",
+      calcFrase: "Oppure: dalla frase di tendenza di Bluruvia",
+      calcFraseSpiega: "Il metodo del <a href='https://mucksw.github.io/Feebas-Tile-Calculator/' target=_blank rel=noopener>calcolatore di mucksw</a>, riletto nel loro codice e riprovato qui. Leggi in gioco la <b>frase di tendenza</b> a Bluruvia e il tuo <b>ID Allenatore</b> (sulla scheda): escono alcuni semi possibili, perche' il conto dipende da quanto e' durata la schermata in cui la frase e' nata. Se hai gia' pescato Feebas da qualche parte, aggiungilo qui sopra e resta solo quello giusto.",
+      calcParola1: "prima parola", calcParola2: "seconda parola", calcTid: "ID Allenatore",
+      calcCerca: "calcola", calcFraseNiente: "Nessun seme trovato con questa frase: controlla le due parole e l'ID.",
+      calcFraseTanti: "%s semi possibili da questa frase. Clicca quello che vuoi vedere:",
+      calcFraseUno: "Un solo seme resta compatibile anche con i tile che hai pescato: %s.",
+      calcFraseAvviso: "Vale se la frase e' ancora quella con cui e' nata la tendenza (non cambiata a mano, niente mescolarecord).",
+      tipoMappa: { indoor: "interno", underground: "sotterraneo", route: "percorso",
+                   secret_base: "base segreta", underwater: "sott'acqua",
+                   ocean_route: "rotta marina", city: "città", town: "paese" },
+      npc: { "Man": "Uomo", "Woman": "Donna", "Boy": "Ragazzo", "Girl": "Ragazza",
+             "Little Boy": "Bambino", "Little Girl": "Bambina", "Old Man": "Anziano",
+             "Old Woman": "Anziana", "Fat Man": "Uomo robusto", "Scientist": "Scienziato",
+             "Sailor": "Marinaio", "Fisherman": "Pescatore", "Hiker": "Avventuriero",
+             "Camper": "Campeggiatore", "Picnicker": "Picnicker", "Youngster": "Bullo",
+             "Lass": "Pupa", "Twin": "Gemella", "Beauty": "Bellezza", "Lady": "Lady",
+             "Rich Boy": "Riccone", "Pokefan F": "Pokéfan (donna)", "Pokefan M": "Pokéfan (uomo)",
+             "Expert F": "Esperta", "Expert M": "Esperto", "Black Belt": "Cintura Nera",
+             "Ninja Boy": "Mini Ninja", "Maniac": "Maniaco", "Psychic M": "Sensitivo",
+             "Psychic F": "Sensitiva", "Gentleman": "Gentiluomo", "Reporter F": "Giornalista",
+             "Reporter M": "Giornalista", "Cameraman": "Cameraman", "Nurse": "Infermiera",
+             "Item Ball": "Strumento a terra", "Pushable Boulder": "Masso spingibile",
+             "Breakable Rock": "Roccia friabile", "Cuttable Tree": "Albero tagliabile",
+             "Prof Birch": "Prof. Betulla", "Mystery Event Deliveryman": "Fattorino degli eventi",
+             "Union Room Attendant": "Addetta della Sala Unione",
+             "Teala": "Addetta", "Beauty Salon Owner": "Titolare del salone" }
+    },
+    en: {
+      sub: "Hoenn rendered from the decomp · live positions from the panel",
+      mappe: "maps", specie: "species", vista: "View", giocatori: "Players",
+      cerca: "Search", dettagli: "Details", legenda: "Legend", segui: "Follow",
+      torna: "‹ Back to panel", fit: "Fit to view",
+      str: "items", per: "people", por: "doors", nom: "names", gri: "grid",
+      cMappe: "Maps", cSpecie: "Pokémon", cAll: "Trainers",
+      phMappe: "Route 110, Littleroot, Center…",
+      phSpecie: "Poochyena, Ralts, Feebas…",
+      phAll: "name or class: Youngster, Calvin…",
+      vuoto: "click something on the map: an area, a trainer, an item, a door",
+      nessunG: "no positions yet: the panel needs the game running (and the payload inside the GBA)",
+      tu: "You (player %s)", amico: "Friend %s", dalVivo: "live", fermo: "idle for %s s",
+      strumenti: "Items", nascosto: "hidden", aTerra: "on the ground", dono: "gift",
+      tieneT: "item it may be holding (steal it with Thief/Covet, or catch it)",
+      allenatori: "Trainers", chi: "who", squadra: "party", tile: "tile",
+      personaggi: "People and objects", selvatici: "Wild Pokémon", nessuno: "none",
+      porte: "Doors", dove: "where", come: "how", pct: "%", lv: "lv", tasso: "rate",
+      entra: "Enter", esce: "Exit to", interno: "Go to", altrove: "Go to",
+      scegli: "Where do you want to go?", uscite: "Which exit?",
+      indietro: "‹ Back", esciB: "Exit ↑",
+      clicMappa: "click to open", vaiQui: "show on the map",
+      evidenziate: "The maps highlighted in yellow are where it lives.",
+      luoghi: "places", singola: "standalone", nonConn: "not connected", mondo: "world",
+      lvl: "Lv", niente: "no results", generato: "generated", albero: "Berry tree:",
+      nienteSquadra: "no Pokémon", nienteSelvatici: "no wild Pokémon here",
+      datiNo: "Map data not found (%s). Generate it once, from the <b>overworld-link</b> folder:<br><code>python tools\\gen_mappa.py</code><br>then reload.",
+      legEntra: "enter (house, cave)", legEsce: "exit outside",
+      legInterno: "floor or room", legAltrove: "another area",
+      legTerra: "item on the ground", legNasc: "hidden (yellow diamond)",
+      legDono: "gift from a person", legAll: "trainer (zoomed out)",
+      legNpc: "other person", legTu: "you", legAmico: "your friend",
+      daVicino: "up close each one has its real sprite",
+      immersione: "Dive to", riemersione: "Surface to", base: "Secret base:",
+      legImm: "dive spot (deep water)", legRiem: "surface spot", legBase: "secret base",
+      legSub: "deep water: dive here", legFeebas: "Feebas candidate tiles",
+      legSat: "detached place (dashed border): the line points to the door you enter from",
+      satNota: "The game does not stitch this place to the rest of the region: you can only get there through a door. It is drawn next to that door (the yellow dot), not at a position the game declares.",
+      legFeebas6: "YOUR 6 Feebas tiles (from the calculator)",
+      dinamica: "Exit: back to wherever you entered from",
+      viaEvento: "not a physical door: in game you get there through an event (challenge, ferry, script)",
+      stessaMappa: "inner passage: takes you somewhere else inside this same map",
+      satDa: "from",
+      sbarco: "you land here",
+      legSbarco: "where the ferry drops you",
+      miraggio: "MIRAGE ISLAND is drawn here in the middle of the route, but in game it only appears on days when the hidden daily number matches the personality of a Pokemon in your party: almost never. Liechi Berries grow there and Wynaut live on it.",
+      premio: "prize money", doppia: "double battle",
+      rivincite: "rematches (%s parties)", rivincita: "rematch %s",
+      rivinciteNota: "When they call you back on the PokeNav they bring one of these parties, not the first one.",
+      ricompensa: "gives you after the battle", mosse: "moves", tiene: "holds",
+      piuPunti: "same item at %s nearby spots (counted once)",
+      cosaCella: "What's here?",
+      solo6: "only on the 6 drawn tiles (see the Feebas note)",
+      calcTitolo: "Feebas tile calculator",
+      calcSpiega: "The 6 real tiles depend on YOUR save: the game draws them from the internal number of the Dewford trendy phrase. Load your <b>.sav</b> file here (it never leaves the browser) and the map paints your 6 tiles in gold.",
+      calcBottone: "Choose .sav…", calcSeme: "or seed (0-65535):",
+      calcFatto: "Done: your 6 tiles are in GOLD on the map (seed %s).",
+      calcErrore: "This file doesn't look like a valid Emerald save.",
+      calcNota: "The seed changes when the trendy phrase changes (and after record mixing). If Feebas won't show up, reload a fresh .sav.",
+      calcDaTile: "No save at hand? Tell me where you already caught Feebas",
+      calcDaTileSpiega: "Works on real hardware too: each tile where Feebas appeared narrows things down. With <b>3 tiles</b> the seed becomes unique; with 2 only a few remain and the likeliest tiles are shown.",
+      calcAggiungi: "add", calcSvuota: "clear",
+      calcTileNoti: "tiles where you caught Feebas:",
+      calcSemiUno: "Found: a single possible seed (%s). Your 6 tiles are in GOLD.",
+      calcSemiTanti: "%s seeds still possible. The likeliest tiles are in gold: try them, then add the one that works.",
+      calcSemiZero: "No seed matches those tiles: check the coordinates (hover the map to read them).",
+      calcTileFuori: "That tile is not a Feebas candidate: Feebas never appears there.",
+      calcFrase: "Or: from the Dewford trendy phrase",
+      calcFraseSpiega: "The method used by <a href='https://mucksw.github.io/Feebas-Tile-Calculator/' target=_blank rel=noopener>mucksw's calculator</a>, re-read from their source and re-tested here. Read the <b>trendy phrase</b> in Dewford and your <b>Trainer ID</b>: a few candidate seeds come out, because the count depends on how long the screen lasted when the phrase was created. If you already caught Feebas somewhere, add it above and only the right one remains.",
+      calcParola1: "first word", calcParola2: "second word", calcTid: "Trainer ID",
+      calcCerca: "calculate", calcFraseNiente: "No seed found for this phrase: check the two words and the ID.",
+      calcFraseTanti: "%s possible seeds from this phrase. Click the one you want to see:",
+      calcFraseUno: "Only one seed is also compatible with the tiles you caught: %s.",
+      calcFraseAvviso: "Valid if the phrase is still the one the trend was born with (not changed by hand, no record mixing).",
+      tipoMappa: { indoor: "indoor", underground: "underground", route: "route",
+                   secret_base: "secret base", underwater: "underwater",
+                   ocean_route: "ocean route", city: "city", town: "town" },
+      npc: {}
+    }
+  };
+  var lang = "it";
+  try { lang = localStorage.getItem("passotile-lang") || "it"; } catch (e) { lang = "it"; }
+  function t(k, a) {
+    var s = (UI[lang] && UI[lang][k]) || UI.it[k] || k;
+    return a === undefined ? s : s.replace("%s", a);
+  }
+  function G(gruppo, chiave, fallback) {
+    // un nome DEL GIOCO: italiano se c'e' nella cartuccia, altrimenti inglese
+    if (lang === "it" && dati && dati.it && dati.it[gruppo] && chiave && dati.it[gruppo][chiave])
+      return dati.it[gruppo][chiave];
+    return fallback;
+  }
+  function nomeMappa(m) { return (lang === "it" && m && m.nome_it) ? m.nome_it : (m ? m.nome : "?"); }
+  function nomeMappaK(k) { return nomeMappa(dati.mappe[k]); }
+  function nomeItem(s) { return G("items", s.c, s.nome); }
+  function nomeSpecie(nome, cost) { return G("specie", cost, nome); }
+  // Il nome di un personaggio nella lingua scelta. L'albero di bacche non e'
+  // una stringa del gioco ma una frase nostra ("Albero di" + la bacca), quindi
+  // si ricompone: la bacca ha il suo nome ufficiale, il resto e' etichetta.
+  function nomePersonaggio(p) {
+    if (p.tipo === "allenatore") return nomeAllenatore(p);
+    if (p.tipo === "albero" && p.c)
+      return t("albero") + " " + G("items", p.c, p.nome.replace(/^Albero di /, ""));
+    // i personaggi con un nome proprio: il nome italiano sta nella cartuccia
+    // (gTrainers), agganciato da gen_mappa.py -> Wallace = Adriano
+    if (p.pc) return G("trainers", p.pc, p.nome);
+    return nomeNpc(p.nome);
+  }
+  // Il nome generico di un NPC ("Man 2", "Scientist 1") e' un'etichetta della
+  // decomp, non un testo di gioco: si traduce col dizionario dell'interfaccia,
+  // numero compreso. Se una parola non c'e' nel dizionario resta in inglese.
+  function nomeNpc(nome) {
+    if (lang !== "it" || !nome) return nome;
+    var m = /^(.*?)( \d+)?$/.exec(nome);
+    var base = m[1], num = m[2] || "";
+    var d = UI.it.npc;
+    if (d[base]) return d[base] + num;
+    return nome;
+  }
+  function nomeMondo(w) { return (lang === "it" && w && w.nome_it) ? w.nome_it : (w ? w.nome : "?"); }
+  function nomeTipoMappa(tp) {
+    var d = UI[lang].tipoMappa || UI.it.tipoMappa;
+    return d[tp] || tp;
+  }
+  function nomeMossa(c) {
+    // MOVE_KARATE_CHOP -> dalla ROM se c'e', altrimenti "Karate Chop"
+    var fallback = c.replace("MOVE_", "").toLowerCase().replace(/_/g, " ")
+                    .replace(/\b\w/g, function (ch) { return ch.toUpperCase(); });
+    return G("mosse", c, fallback);
+  }
+  function nomeItemC(c) {
+    var fallback = c.replace("ITEM_", "").toLowerCase().replace(/_/g, " ")
+                    .replace(/\b\w/g, function (ch) { return ch.toUpperCase(); });
+    return G("items", c, fallback);
+  }
+  function nomeAllenatore(p) {
+    if (lang === "it" && dati.it && dati.it.classi && dati.it.trainers) {
+      var c = dati.it.classi[p.cc], n = dati.it.trainers[p.tc];
+      if (c && n) return c + " " + n;
+    }
+    return p.nome;
+  }
+
+  function applicaLingua() {
+    document.documentElement.lang = lang;
+    $("lang-it").className = lang === "it" ? "on" : "";
+    $("lang-en").className = lang === "en" ? "on" : "";
+    $("t-sub").textContent = t("sub");
+    $("t-mappe").textContent = t("mappe");
+    $("t-specie").textContent = t("specie");
+    $("t-vista").textContent = t("vista");
+    $("t-giocatori").textContent = t("giocatori");
+    $("t-cerca").textContent = t("cerca");
+    $("t-dettagli").textContent = t("dettagli");
+    $("t-legenda").textContent = t("legenda");
+    $("t-segui").textContent = t("segui");
+    $("t-torna").textContent = t("torna");
+    $("btn-fit").title = t("fit");
+    $("t-ck-str").textContent = t("str");
+    $("t-ck-per").textContent = t("per");
+    $("t-ck-por").textContent = t("por");
+    $("t-ck-nom").textContent = t("nom");
+    $("t-ck-gri").textContent = t("gri");
+    $("t-c-mappe").textContent = t("cMappe");
+    $("t-c-specie").textContent = t("cSpecie");
+    $("t-c-all").textContent = t("cAll");
+    $("btn-indietro").textContent = t("indietro");
+    $("btn-esci").textContent = t("esciB");
+    $("cerca").placeholder = t(modoCerca === "mappe" ? "phMappe" : modoCerca === "specie" ? "phSpecie" : "phAll");
+    disegnaLegenda();
+    if (dati) {
+      costruisciSelettoreMondi();
+      aggiornaRisultati();
+      aggiornaGiocatori();
+      aggiornaNav();
+      if (selezionata) mostraMappa(selezionata);
+      else $("dett").innerHTML = "<span class='muto'>" + t("vuoto") + "</span>";
+    }
+    dirty = true;
+  }
+
+  $("lang-it").onclick = function () { lang = "it"; try { localStorage.setItem("passotile-lang", lang); } catch (e) {} applicaLingua(); };
+  $("lang-en").onclick = function () { lang = "en"; try { localStorage.setItem("passotile-lang", lang); } catch (e) {} applicaLingua(); };
+
+  // ---------------------------------------------------------------- dati
+  function carica() {
+    fetch("mappa/dati.json", { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (d) {
+      dati = d; MAP_OFFSET = d.map_offset || 7;
+      if (!dati.it) dati.it = {};
+      costruisciSelettoreMondi();
+      collegaControlli();
+      var inizio = d.mondi.hoenn ? { tipo: "mondo", id: "hoenn" } : { tipo: "mondo", id: Object.keys(d.mondi)[0] };
+      impostaVista(inizio, true);
+      $("targa-mappe").textContent = Object.keys(d.mappe).length;
+      $("targa-specie").textContent = Object.keys(d.specie).length;
+      $("stato").textContent = t("generato") + " " + d.generato;
+      applicaLingua();
+      // il seme di Feebas dell'ultima volta, se c'era: si riapplica da solo
+      try {
+        var fs = localStorage.getItem("passotile-feebas-seme");
+        if (fs !== null) {
+          Object.keys(d.mappe).forEach(function (k) {
+            if (d.mappe[k].feebas && d.mappe[k].feebas.length) applicaFeebasSeme(k, parseInt(fs, 10));
+          });
+        }
+      } catch (e) { /* niente */ }
+      poll();
+      setInterval(poll, 500);
+    }).catch(function (e) {
+      $("avviso").classList.add("visibile");
+      $("avviso-testo").innerHTML = t("datiNo", e.message);
+      $("stato").textContent = "—";
+    });
+  }
+
+  function mappaDi(key) { return dati.mappe[key]; }
+  function chiaveDi(g, n) { return g + "." + n; }
+
+  function origine(key) {
+    var m = mappaDi(key);
+    if (!m) return null;
+    if (vista.tipo === "mappa") return key === vista.key ? { x: 0, y: 0 } : null;
+    if (m.mondo !== vista.id) return null;
+    return { x: m.ox, y: m.oy };
+  }
+
+  function mappeDellaVista() {
+    if (vista.tipo === "mappa") return [vista.key];
+    return dati.mondi[vista.id].mappe;
+  }
+
+  function dimensioniVista() {
+    if (vista.tipo === "mappa") { var m = mappaDi(vista.key); return { w: m.w * T, h: m.h * T }; }
+    var w = dati.mondi[vista.id]; return { w: w.w * T, h: w.h * T };
+  }
+
+  function impostaVista(v, fit) {
+    vista = v;
+    $("sel-mondo").value = v.tipo === "mondo" ? "mondo:" + v.id : "mappa:" + v.key;
+    if (fit) adatta();
+    if (dati) aggiornaNav();
+    dirty = true;
+  }
+
+  function adatta() {
+    var d = dimensioniVista();
+    var W = tela.clientWidth, H = tela.clientHeight;
+    z = Math.max(0.05, Math.min(W / d.w, H / d.h) * 0.96);
+    cx = d.w / 2; cy = d.h / 2;
+    dirty = true;
+  }
+
+  function centraSu(key, tx, ty, zoom) {
+    var o = origine(key);
+    if (!o) {
+      var m = mappaDi(key);
+      impostaVista(m.mondo ? { tipo: "mondo", id: m.mondo } : { tipo: "mappa", key: key }, false);
+      o = origine(key);
+    }
+    var m2 = mappaDi(key);
+    cx = (o.x + (tx === undefined ? m2.w / 2 : tx + 0.5)) * T;
+    cy = (o.y + (ty === undefined ? m2.h / 2 : ty + 0.5)) * T;
+    if (zoom) z = zoom;
+    dirty = true;
+  }
+
+  // ---------------------------------------------------------------- immagini
+  function img(src, cache) {
+    var im = cache[src];
+    if (im) return im;
+    im = new Image();
+    im.onload = function () { dirty = true; };
+    im.onerror = function () { im.rotta = true; };
+    im.src = "mappa/" + src;
+    cache[src] = im;
+    return im;
+  }
+  function iconaItem(s) {
+    if (!s.c || !dati.item || !dati.item[s.c]) return null;
+    return img(dati.item[s.c], itemImg);
+  }
+
+  // ---------------------------------------------------------------- disegno
+  function ridimensiona() {
+    var r = tela.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    tela.width = Math.round(r.width * dpr); tela.height = Math.round(r.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dirty = true;
+  }
+  window.addEventListener("resize", ridimensiona);
+
+  function sx(gx) { return (gx - cx) * z + tela.clientWidth / 2; }
+  function sy(gy) { return (gy - cy) * z + tela.clientHeight / 2; }
+  function gx(px) { return (px - tela.clientWidth / 2) / z + cx; }
+  function gy(py) { return (py - tela.clientHeight / 2) / z + cy; }
+
+  function disegna() {
+    // Se c'e' un'animazione in corso si ridisegna comunque: `dirty` segnala
+    // i cambiamenti, non lo scorrere del tempo.
+    if (qualcunoCammina()) dirty = true;
+    if (!dirty || !dati) { requestAnimationFrame(disegna); return; }
+    dirty = false;
+    var dpr0 = window.devicePixelRatio || 1;
+    if (tela.width !== Math.round(tela.clientWidth * dpr0) || tela.height !== Math.round(tela.clientHeight * dpr0)) ridimensiona();
+    var W = tela.clientWidth, H = tela.clientHeight;
+    ctx.clearRect(0, 0, W, H);
+    ctx.imageSmoothingEnabled = z < 1;
+    var chiavi = mappeDellaVista();
+
+    // 1. le mappe
+    for (var i = 0; i < chiavi.length; i++) {
+      var k = chiavi[i], m = mappaDi(k), o = origine(k);
+      var x0 = sx(o.x * T), y0 = sy(o.y * T), w = m.w * T * z, h = m.h * T * z;
+      if (x0 > W || y0 > H || x0 + w < 0 || y0 + h < 0) continue;
+      var im = img(m.img, immagini);
+      if (im.complete && im.naturalWidth) ctx.drawImage(im, x0, y0, w, h);
+      else { ctx.fillStyle = "#17402f"; ctx.fillRect(x0, y0, w, h); }
+      if (evidenziate[k]) { ctx.fillStyle = "rgba(255,214,64,.30)"; ctx.fillRect(x0, y0, w, h); ctx.strokeStyle = "#ffcf3d"; ctx.lineWidth = 2; ctx.strokeRect(x0, y0, w, h); }
+      if (selezionata === k) { ctx.strokeStyle = "#3fd68f"; ctx.lineWidth = 2; ctx.strokeRect(x0 + 1, y0 + 1, w - 2, h - 2); }
+    }
+
+    // 1-bis. I SATELLITI: i luoghi all'aperto che il gioco NON cuce al resto
+    // (Torre dei Cieli, Ceneride, Bosco Petalo, Monte Camino, Passo
+    // Selvaggio, Monte Pira). Sono messi accanto alla porta da cui ci si
+    // arriva, non nella posizione dichiarata dal gioco - che non esiste -
+    // quindi si disegnano col BORDO TRATTEGGIATO e una linea fino alla
+    // porta: la mappa non deve spacciarli per terreno cucito.
+    if (vista.tipo === "mondo") {
+      for (var is = 0; is < chiavi.length; is++) {
+        var ks = chiavi[is], ms = mappaDi(ks);
+        if (!ms.satellite) continue;
+        var os3 = origine(ks);
+        if (!os3) continue;
+        // IL RIQUADRO PUO' COPRIRE PIU' MAPPE. Il Parco Lotta e' Ovest+Est
+        // affiancate: con un bordo e un nome per meta' sembrava spezzato in
+        // due, e per capire da dove si entra bisognava cliccare (Lain,
+        // 2026-08-25). Ora il gruppo ha un riquadro solo.
+        var bx0 = os3.x, by0 = os3.y, bw0 = ms.w, bh0 = ms.h;
+        if (ms.satellite_box) {
+          bx0 = ms.satellite_box[0]; by0 = ms.satellite_box[1];
+          bw0 = ms.satellite_box[2]; bh0 = ms.satellite_box[3];
+        }
+        var sx0 = sx(bx0 * T), sy0 = sy(by0 * T);
+        var sw2 = bw0 * T * z, sh2 = bh0 * T * z;
+        ctx.save();
+        // LA LINEA fino al punto di partenza SOLO sul luogo selezionato:
+        // sempre accesa, tagliava Hoenn da un capo all'altro.
+        if (selezionata === ks) {
+          var px4 = sx(ms.satellite[0] * T), py4 = sy(ms.satellite[1] * T);
+          ctx.setLineDash([6, 4]);
+          ctx.strokeStyle = "rgba(255,207,61,.8)";
+          ctx.lineWidth = Math.max(1, Math.min(2.5, z * 2));
+          ctx.beginPath();
+          ctx.moveTo(sx0 + sw2 / 2, sy0 + sh2 / 2); ctx.lineTo(px4, py4);
+          ctx.stroke();
+          if (z * T >= 3) {
+            ctx.setLineDash([]);
+            ctx.beginPath(); ctx.arc(px4, py4, Math.max(2.5, z * T * 0.22), 0, Math.PI * 2);
+            ctx.fillStyle = "#ffcf3d"; ctx.fill();
+            ctx.strokeStyle = "rgba(8,26,20,.8)"; ctx.lineWidth = 1; ctx.stroke();
+          }
+        }
+        // il bordo tratteggiato: locale, sempre acceso
+        ctx.setLineDash([7, 5]);
+        ctx.strokeStyle = "#ffcf3d";
+        ctx.lineWidth = Math.max(1, Math.min(2, z * 1.5));
+        ctx.strokeRect(sx0 + 0.5, sy0 + 0.5, sw2 - 1, sh2 - 1);
+        ctx.restore();
+        // DOVE SI SBARCA: il tile su cui il traghetto ti lascia, letto dal
+        // `warp` di copione del porto (gen_mappa.py). E' la risposta a "da
+        // dove si parte" senza dover cliccare in giro.
+        if (ms.sbarco) {
+          var ax2 = sx((ms.sbarco[0] + 0.5) * T), ay2 = sy((ms.sbarco[1] + 0.5) * T);
+          var rr = Math.max(4, Math.min(13, T * z * 0.8));
+          ctx.beginPath(); ctx.arc(ax2, ay2, rr, 0, Math.PI * 2);
+          ctx.fillStyle = "#ffcf3d"; ctx.fill();
+          ctx.lineWidth = 1.5; ctx.strokeStyle = "#4a3a00"; ctx.stroke();
+          if (rr >= 7) {
+            ctx.fillStyle = "#3a2d00";
+            ctx.font = "700 " + Math.round(rr * 1.2) + "px 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif";
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText(String.fromCharCode(0x2693), ax2, ay2 + 0.5);
+          }
+        }
+      }
+    }
+
+    // 2. griglia
+    if (mostraGriglia && z * T >= 6) {
+      ctx.strokeStyle = "rgba(255,255,255,.14)"; ctx.lineWidth = 1;
+      var d = dimensioniVista();
+      var tx0 = Math.max(0, Math.floor(gx(0) / T)), tx1 = Math.min(d.w / T, Math.ceil(gx(W) / T));
+      var ty0 = Math.max(0, Math.floor(gy(0) / T)), ty1 = Math.min(d.h / T, Math.ceil(gy(H) / T));
+      ctx.beginPath();
+      for (var tx = tx0; tx <= tx1; tx++) { var px = Math.round(sx(tx * T)) + .5; ctx.moveTo(px, 0); ctx.lineTo(px, H); }
+      for (var ty = ty0; ty <= ty1; ty++) { var py = Math.round(sy(ty * T)) + .5; ctx.moveTo(0, py); ctx.lineTo(W, py); }
+      ctx.stroke();
+    }
+
+    // 3. i personaggi: sprite veri, SENZA riquadro (2026-08-22, chiesto da Lain)
+    if (mostraPersonaggi && dati.oe) {
+      var soglia = z * T >= 5;
+      for (var jp = 0; jp < chiavi.length; jp++) {
+        var kp = chiavi[jp], mp = mappaDi(kp), op = origine(kp);
+        for (var q = 0; q < mp.personaggi.length; q++) {
+          var pe = mp.personaggi[q], ge = dati.oe[pe.gfx];
+          var bx2 = sx((op.x + pe.x) * T), by2 = sy((op.y + pe.y) * T);
+          if (bx2 < -64 || by2 < -64 || bx2 > W + 64 || by2 > H + 64) continue;
+          if (soglia && ge && (ge.img[pe.dir] || ge.img.giu)) {
+            var im2 = img(ge.img[pe.dir] || ge.img.giu, oeImg);
+            if (im2.complete && im2.naturalWidth) {
+              var dw = ge.w * z, dh = ge.h * z;
+              ctx.imageSmoothingEnabled = false;
+              ctx.drawImage(im2, bx2 + (T * z - dw) / 2, by2 + T * z - dh, dw, dh);
+              ctx.imageSmoothingEnabled = z < 1;
+              continue;
+            }
+          }
+          ctx.beginPath(); ctx.arc(bx2 + T * z / 2, by2 + T * z / 2, pe.tipo === "allenatore" ? 3 : 2, 0, Math.PI * 2);
+          ctx.fillStyle = pe.tipo === "allenatore" ? "#ff3b3b" : (pe.tipo === "npc" ? "#f2ede1" : "#8fbf6f"); ctx.fill();
+          if (pe.tipo === "allenatore") { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.stroke(); }
+        }
+      }
+    }
+
+    // 4. gli strumenti, con l'icona VERA - SOPRA i personaggi (2026-08-24)
+    //
+    // L'ordine e' il contrario di quello che verrebbe naturale, ed e'
+    // voluto: con gli strumenti sotto, l'icona finiva dietro lo sprite
+    // dell'NPC e per sapere che oggetto fosse bisognava cliccare
+    // (riscontro di Lain). Le persone si riconoscono lo stesso perche'
+    // l'icona e' piccola e centrata sul tile.
+    if (mostraStrumenti) {
+      var lato = Math.max(9, Math.min(26, T * z * 1.5));
+      for (var j = 0; j < chiavi.length; j++) {
+        var km = chiavi[j], mm = mappaDi(km), oo = origine(km);
+        // quante voci stanno sulla STESSA cella: dove sono piu' d'una si
+        // disegna un distintivo xN, e il clic apre il menu di scelta
+        var celle = {};
+        for (var s0 = 0; s0 < mm.strumenti.length; s0++) {
+          var kc = mm.strumenti[s0].x + "," + mm.strumenti[s0].y;
+          celle[kc] = (celle[kc] || 0) + 1;
+        }
+        var badgeFatti = {};
+        for (var s = 0; s < mm.strumenti.length; s++) {
+          var it = mm.strumenti[s];
+          var px2 = sx((oo.x + it.x + 0.5) * T), py2 = sy((oo.y + it.y + 0.5) * T);
+          if (px2 < -20 || py2 < -20 || px2 > W + 20 || py2 > H + 20) continue;
+          var kc2 = it.x + "," + it.y;
+          if (celle[kc2] > 1 && !badgeFatti[kc2] && z * T >= 5) {
+            badgeFatti[kc2] = 1;
+            ctx.beginPath(); ctx.arc(px2 + lato * 0.55, py2 - lato * 0.55, Math.max(6, lato * 0.38), 0, Math.PI * 2);
+            ctx.fillStyle = "#c03535"; ctx.fill();
+            ctx.lineWidth = 1; ctx.strokeStyle = "#fff"; ctx.stroke();
+            ctx.fillStyle = "#fff";
+            ctx.font = "700 " + Math.max(9, Math.round(lato * 0.5)) + "px 'Segoe UI', system-ui, sans-serif";
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText("×" + celle[kc2], px2 + lato * 0.55, py2 - lato * 0.55 + 0.5);
+          }
+          var ii = iconaItem(it);
+          if (ii && ii.complete && ii.naturalWidth && z * T >= 5) {
+            ctx.imageSmoothingEnabled = false;
+            if (it.nascosto) ctx.globalAlpha = 0.85;
+            ctx.drawImage(ii, px2 - lato / 2, py2 - lato / 2, lato, lato);
+            ctx.globalAlpha = 1;
+            ctx.imageSmoothingEnabled = z < 1;
+            if (it.nascosto) {
+              // il rombo giallo: nel gioco questo strumento NON si vede
+              ctx.beginPath();
+              var r2 = lato * 0.30;
+              ctx.moveTo(px2, py2 - lato / 2 - r2); ctx.lineTo(px2 + r2, py2 - lato / 2);
+              ctx.lineTo(px2, py2 - lato / 2 + r2); ctx.lineTo(px2 - r2, py2 - lato / 2);
+              ctx.closePath();
+              ctx.fillStyle = "#e8c020"; ctx.fill();
+              ctx.lineWidth = 1; ctx.strokeStyle = "#4a3a00"; ctx.stroke();
+            } else if (it.dono) {
+              ctx.beginPath(); ctx.arc(px2, py2, lato * 0.62, 0, Math.PI * 2);
+              ctx.lineWidth = 2; ctx.strokeStyle = "#ff9b3b"; ctx.stroke();
+            }
+            continue;
+          }
+          var r = Math.max(3, Math.min(8, z * T * 0.4));
+          ctx.beginPath(); ctx.arc(px2, py2, r, 0, Math.PI * 2);
+          if (it.nascosto) { ctx.fillStyle = "#e8c020"; ctx.fill(); ctx.setLineDash([2, 2]); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]); }
+          else if (it.dono) { ctx.fillStyle = "#ff9b3b"; ctx.fill(); ctx.strokeStyle = "#111"; ctx.lineWidth = 1; ctx.stroke(); }
+          else { ctx.fillStyle = "#e03a3a"; ctx.fill(); ctx.strokeStyle = "#111"; ctx.lineWidth = 1; ctx.stroke(); }
+        }
+      }
+    }
+
+    // 4-bis. i tile di Feebas (solo Percorso 119)
+    //
+    // Non sono "i sei punti": quelli il gioco li sorteggia per salvataggio e
+    // da fuori non si possono sapere. Questi sono i 444 tile CANDIDATI - fuori
+    // di qui Feebas non esce mai - e sono comunque l'informazione utile: dice
+    // dove ha senso pescare e dove no.
+    if (mostraFeebas) {
+      for (var jf = 0; jf < chiavi.length; jf++) {
+        var kf = chiavi[jf], mf = mappaDi(kf), of2 = origine(kf);
+        if (!mf.feebas || !mf.feebas.length) continue;
+        ctx.fillStyle = "rgba(64,196,222,.45)";
+        ctx.strokeStyle = "rgba(9,86,105,.75)";
+        ctx.lineWidth = 1;
+        for (var q2 = 0; q2 < mf.feebas.length; q2++) {
+          var fx = sx((of2.x + mf.feebas[q2][0]) * T), fy = sy((of2.y + mf.feebas[q2][1]) * T);
+          var ts2 = T * z;
+          if (fx < -ts2 || fy < -ts2 || fx > W || fy > H) continue;
+          ctx.fillRect(fx, fy, ts2, ts2);
+          if (ts2 >= 6) ctx.strokeRect(fx + 0.5, fy + 0.5, ts2 - 1, ts2 - 1);
+        }
+        // I TILE PIU' PROBABILI, quando i semi candidati sono ancora tanti:
+        // oro pallido, tanto piu' acceso quanto piu' spesso quel tile compare
+        // fra i semi ancora possibili.
+        if (!feebas6[kf] && feebasProb[kf]) {
+          var pr = feebasProb[kf], maxp = 0, kk2;
+          for (kk2 in pr) if (pr[kk2] > maxp) maxp = pr[kk2];
+          for (kk2 in pr) {
+            var cc = kk2.split(","), fx2 = sx((of2.x + +cc[0]) * T), fy2 = sy((of2.y + +cc[1]) * T);
+            var tp = T * z;
+            if (fx2 < -tp || fy2 < -tp || fx2 > W || fy2 > H) continue;
+            ctx.fillStyle = "rgba(232,192,32," + (0.25 + 0.6 * pr[kk2] / maxp).toFixed(2) + ")";
+            ctx.fillRect(fx2, fy2, tp, tp);
+          }
+        }
+        // I TILE DOVE HAI GIA' PESCATO: contorno verde, sono certezze.
+        for (var qn = 0; qn < feebasNoti.length; qn++) {
+          var nx = sx((of2.x + feebasNoti[qn][0]) * T), ny = sy((of2.y + feebasNoti[qn][1]) * T);
+          var tn = T * z;
+          if (nx < -tn || ny < -tn || nx > W || ny > H) continue;
+          ctx.strokeStyle = "#3fd68f"; ctx.lineWidth = 2;
+          ctx.strokeRect(nx + 1, ny + 1, tn - 2, tn - 2);
+        }
+        // I TUOI 6 (dal calcolatore, se usato): in ORO sopra i candidati.
+        var sei = feebas6[kf];
+        if (sei) {
+          ctx.fillStyle = "rgba(232,192,32,.85)";
+          ctx.strokeStyle = "#4a3a00";
+          for (var q6 = 0; q6 < sei.length; q6++) {
+            var gx = sx((of2.x + sei[q6][0]) * T), gy = sy((of2.y + sei[q6][1]) * T);
+            var tg = T * z;
+            if (gx < -tg || gy < -tg || gx > W || gy > H) continue;
+            ctx.fillRect(gx, gy, tg, tg);
+            ctx.strokeRect(gx + 0.5, gy + 0.5, tg - 1, tg - 1);
+          }
+        }
+      }
+    }
+
+    // 4-ter. l'acqua fonda (immersione/riemersione): TUTTI i tile buoni,
+    // non solo il pin - nel gioco ci si immerge da qualunque tile profondo.
+    if (mostraPorte) {
+      for (var js = 0; js < chiavi.length; js++) {
+        var ks = chiavi[js], ms = mappaDi(ks), os2 = origine(ks);
+        if (!ms.sub || !ms.sub.length) continue;
+        ctx.fillStyle = "rgba(13,143,184,.30)";
+        for (var qs = 0; qs < ms.sub.length; qs++) {
+          var sx3 = sx((os2.x + ms.sub[qs][0]) * T), sy3 = sy((os2.y + ms.sub[qs][1]) * T);
+          var ts3 = T * z;
+          if (sx3 < -ts3 || sy3 < -ts3 || sx3 > W || sy3 > H) continue;
+          ctx.fillRect(sx3, sy3, ts3, ts3);
+        }
+      }
+    }
+
+    // 5. nomi delle mappe
+    if (mostraNomi && vista.tipo === "mondo") {
+      ctx.font = "700 " + Math.max(11, Math.min(16, 11 + z * 6)) + "px 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      for (var n = 0; n < chiavi.length; n++) {
+        var kn = chiavi[n], mn = mappaDi(kn), on = origine(kn);
+        var cxp = sx((on.x + mn.w / 2) * T), cyp = sy((on.y + mn.h / 2) * T);
+        if (mn.satellite_box) {
+          cxp = sx((mn.satellite_box[0] + mn.satellite_box[2] / 2) * T);
+          cyp = sy((mn.satellite_box[1] + mn.satellite_box[3] / 2) * T);
+        }
+        if (cxp < 0 || cyp < 0 || cxp > W || cyp > H) continue;
+        // i SATELLITI si etichettano sempre: sono piccoli e staccati, e senza
+        // nome restano "una roba" in mezzo al mare (riscontro di Lain)
+        if (mn.w * T * z < 60 && !mn.satellite) continue;
+        if (mn.satellite_parte) continue;   // il nome lo scrive il capogruppo
+        // per un gruppo si scrive il nome della ZONA ("Parco Lotta"),
+        // non quello della meta' su cui capita il riquadro
+        var et = mn.satellite_nome ? G("mapsec", mn.satellite_nome, nomeMappa(mn)) : nomeMappa(mn);
+        ctx.lineWidth = 3.5; ctx.strokeStyle = "rgba(8,26,20,.85)"; ctx.strokeText(et, cxp, cyp);
+        ctx.fillStyle = "#f6f2e6"; ctx.fillText(et, cxp, cyp);
+        // Al posto della riga lunga: una didascalia che dice DA DOVE si
+        // arriva. Sta addosso al luogo, non attraversa la mappa.
+        if (mn.satellite && mn.satellite_da && dati.mappe[mn.satellite_da] && z * T >= 5) {
+          var da = String.fromCharCode(0x2937) + " " + t("satDa") + " " + nomeMappa(dati.mappe[mn.satellite_da]);
+          var f0 = ctx.font;
+          ctx.font = "600 " + Math.max(9, Math.min(13, 9 + z * 4)) + "px 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif";
+          ctx.lineWidth = 3; ctx.strokeStyle = "rgba(8,26,20,.85)";
+          ctx.strokeText(da, cxp, cyp + 15);
+          ctx.fillStyle = "#ffcf3d"; ctx.fillText(da, cxp, cyp + 15);
+          ctx.font = f0;
+        }
+      }
+    }
+
+    // 6. le porte
+    if (mostraPorte) {
+      var pv = porteVisibili();
+      for (var d2 = 0; d2 < pv.length; d2++) {
+        var pp = pv[d2];
+        if (pp.px < -20 || pp.py < -20 || pp.px > W + 20 || pp.py > H + 20) continue;
+        disegnaPorta(pp.px, pp.py, pp.porta.tipo, pp.s, pp.porta.stessa);
+      }
+    }
+
+    // 7. i giocatori
+    for (var p = 0; p < giocatori.length; p++) {
+      var g = giocatori[p], kg = chiaveDi(g.gruppo, g.numero), og = origine(kg);
+      if (!og) continue;
+      var pa = posAnim(g.peer);
+      var tx2 = (pa.x != null ? pa.x : g.x) - MAP_OFFSET, ty2 = (pa.y != null ? pa.y : g.y) - MAP_OFFSET;
+      var bx = sx((og.x + tx2) * T), by = sy((og.y + ty2) * T);
+      var sw = T * z, sh = 2 * T * z;
+      var stale = (Date.now() / 1000 - g.t) > 15;
+      ctx.globalAlpha = stale ? 0.45 : 1;
+      var DIR_NOMI = { 1: "giu", 2: "su", 3: "sx", 4: "dx" };
+      // LA DIREZIONE (2026-08-25): mentre CAMMINA comanda il delta del passo
+      // (dax->x), non il campo dir del payload - un pacchetto STATO o un dir
+      // fuori range faceva girare lo sprite a caso a meta' passo. Da fermo
+      // vale g.dir, e se g.dir non e' 1-4 si tiene l'ULTIMA direzione vista
+      // invece di scattare a sud.
+      var dnome = pa.cammina && pa.dir ? pa.dir : DIR_NOMI[g.dir];
+      var a0 = anim[g.peer];
+      if (!dnome && a0) dnome = a0.dirUlt;
+      if (!dnome) dnome = "giu";
+      if (a0) a0.dirUlt = dnome;
+      // il fotogramma: fermo, oppure il passo - il piede si alterna PER
+      // PASSO (parita' del contatore), non dentro il passo: prima ogni passo
+      // faceva A poi B e la gamba sembrava tremare
+      // IL MODO (2026-08-30): bici, surf e corsa, non solo la camminata.
+      // Lo stato viaggia nel protocollo da sempre - byte 11 avatarState
+      // (PLAYER_AVATAR_STATE_*) e byte 2 speed (SPEED_*) di NetEvent - ma qui
+      // non veniva letto, e chi era in bici o in surf appariva a piedi.
+      // La corsa si mostra solo MENTRE si cammina: da fermo il gioco stesso
+      // rimette la posa normale, e un allenatore immobile in posa di corsa
+      // sembrerebbe un difetto.
+      var modo = "";
+      if (g.avatar === 1) modo = "mach";
+      else if (g.avatar === 2) modo = "acro";
+      else if (g.avatar === 3 || g.avatar === 4) modo = "surf";   // 4 = sott'acqua
+      else if (g.speed === 1 && pa.cammina) modo = "corsa";
+      // Il surf non ha fotogrammi di andatura: nella decomp le andature
+      // rimandano allo stesso disegno (sPicTable_BrendanSurfing), perche' a
+      // dondolare e' la bolla del Pokemon, non l'allenatore.
+      var animato = (modo !== "surf");
+      var largo2 = (modo === "mach" || modo === "acro" || modo === "surf");
+      var suff = (animato && pa.cammina && pa.f) ? (pa.f === 1 ? "_a" : "_b") : "";
+      var nomeSprite = (g.genere === 1 ? "may" : "brendan") + "_"
+                     + (modo ? modo + "_" : "") + dnome;
+      var spr = img("sprite/" + nomeSprite + suff + ".png", sprite);
+      if (!(spr.complete && spr.naturalWidth) && suff) {
+        // il fotogramma di camminata non c'e' (dati generati da una versione
+        // precedente): si ripiega sul fermo invece di lasciare un buco.
+        spr = img("sprite/" + nomeSprite + ".png", sprite);
+      }
+      if (!(spr.complete && spr.naturalWidth) && modo) {
+        // nemmeno il modo c'e' (sprite generati prima del 30/08): si ripiega
+        // sull'allenatore a piedi, che c'e' da sempre.
+        spr = img("sprite/" + (g.genere === 1 ? "may" : "brendan") + "_"
+                  + dnome + ".png", sprite);
+        largo2 = false;
+      }
+      if (z * T >= 6 && spr.complete && spr.naturalWidth) {
+        // I disegni di bici e surf sono 32x32 (due tile), non 16x32: si
+        // allargano al doppio e si centrano sul tile, tenendo la stessa riga
+        // di base - i piedi restano sul fondo del tile come a piedi.
+        var dw = largo2 ? sw * 2 : sw;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(spr, bx - (dw - sw) / 2, by - sh / 2, dw, sh);
+        ctx.imageSmoothingEnabled = z < 1;
+      } else {
+        ctx.beginPath(); ctx.arc(bx + sw / 2, by + sw / 2, Math.max(5, sw / 2), 0, Math.PI * 2);
+        ctx.fillStyle = g.io ? "#7fb2ff" : "#3fd68f"; ctx.fill(); ctx.strokeStyle = "#08211a"; ctx.lineWidth = 1.5; ctx.stroke();
+      }
+      var STATO_NOMI = { 0: "", 1: "in lotta", 2: "in un dialogo", 3: "nel menu", 4: "nella Borsa", 5: "nella Squadra", 6: "nel Pokédex", 7: "nel PokéNav" };
+      var STATO_EN = { 0: "", 1: "in battle", 2: "in a dialog", 3: "in the menu", 4: "in the Bag", 5: "in the Party", 6: "in the Pokédex", 7: "in the PokéNav" };
+      var st = (lang === "it" ? STATO_NOMI : STATO_EN)[g.stato] || "";
+      var eti = g.label + (st ? " · " + st : "");
+      ctx.font = "700 12px 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+      var tw = ctx.measureText(eti).width + 12, ex = bx + sw / 2, ey = by - sh / 2 - 4;
+      ctx.fillStyle = g.io ? "rgba(30,74,148,.94)" : "rgba(11,77,54,.94)";
+      ctx.beginPath();
+      if (ctx.roundRect) { ctx.roundRect(ex - tw / 2, ey - 18, tw, 18, 5); ctx.fill(); }
+      else ctx.fillRect(ex - tw / 2, ey - 18, tw, 18);
+      ctx.fillStyle = "#f6f2e6"; ctx.fillText(eti, ex, ey - 3);
+      ctx.globalAlpha = 1;
+    }
+    requestAnimationFrame(disegna);
+  }
+
+  // ---------------------------------------------------------------- porte
+  function dimPorta() { return Math.max(9, Math.min(20, T * z * 0.85)); }
+
+  function porteVisibili() {
+    var out = [];
+    if (!dati) return out;
+    var chiavi = mappeDellaVista(), s = dimPorta();
+    for (var i = 0; i < chiavi.length; i++) {
+      var k = chiavi[i], m = mappaDi(k), o = origine(k);
+      var porte = m.porte || [];
+      for (var j = 0; j < porte.length; j++) {
+        var w = porte[j];
+        out.push({ porta: w, mappa: m, key: k, s: s,
+                   px: sx((o.x + w.x + 0.5) * T), py: sy((o.y + w.y + 0.5) * T) });
+      }
+    }
+    return out;
+  }
+
+  function disegnaPorta(px, py, tipo, s, stessa) {
+    var col = stessa ? PORTA_STESSA_COL : (PORTA_COL[tipo] || "#2f6bc0"), r = s / 2;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(px - r, py - r, s, s, Math.max(2, s * 0.28));
+    else ctx.rect(px - r, py - r, s, s);
+    ctx.fillStyle = col; ctx.fill();
+    ctx.restore();
+    ctx.lineWidth = 1; ctx.strokeStyle = "rgba(8,26,20,.75)"; ctx.stroke();
+    if (s >= 12) {
+      ctx.fillStyle = "#fff";
+      ctx.font = "700 " + Math.round(s * 0.62) + "px 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(stessa ? SIMBOLO_STESSA : PORTA_FRECCIA[tipo] || "\u2192", px, py + 0.5);
+    }
+  }
+
+  // TUTTE le porte sotto il puntatore, non solo la piu' vicina: in parecchi
+  // posti (i Centri, i palazzi del Fronte) piu' usci finiscono sullo stesso
+  // tile o su tile adiacenti, e sceglierne una a caso vorrebbe dire portare
+  // l'utente in un posto che non ha chiesto. Se sono piu' d'una, si chiede.
+  function porteSotto(px, py) {
+    if (!mostraPorte) return [];
+    var pv = porteVisibili(), out = [];
+    for (var i = 0; i < pv.length; i++) {
+      var p = pv[i], d = Math.hypot(p.px - px, p.py - py);
+      // bersaglio generoso: almeno un tile e mezzo di raggio - il pin da 7px
+      // della vista larga era il motivo per cui "le stanze dei Regi non si
+      // aprivano": si mancava di due pixel e si prendeva la mappa
+      if (d <= Math.max(p.s / 2 + 3, T * z * 1.5)) out.push({ p: p, d: d });
+    }
+    out.sort(function (a, b) { return a.d - b.d; });
+    return out.map(function (x) { return x.p; });
+  }
+
+  // Le porte VICINE a quella colpita. L'attivazione resta stretta (si clicca
+  // il pin, non un'area vaga), ma una volta colpita si guarda se accanto ce
+  // ne sono altre: nelle palestre e nei Centri l'uscita e le scale stanno su
+  // tile confinanti, e a zoom normale i due pin non si sovrappongono - senza
+  // questo, il menu di scelta sarebbe comparso solo guardando tutta Hoenn,
+  // cioe' mai quando serve (2026-08-22).
+  function porteCompagne(scelta) {
+    var pv = porteVisibili(), raggio = Math.max(scelta.s, T * z * 1.4), out = [scelta.porta];
+    var visti = {};
+    // i passaggi interni hanno tutti la stessa destinazione (questa mappa)
+    // ma un ARRIVO diverso: si distinguono per il tile d'arrivo
+    function chiavePorta(w) { return w.stessa ? (w.a + ":" + w.ax + "," + w.ay) : w.a; }
+    visti[chiavePorta(scelta.porta)] = 1;
+    for (var i = 0; i < pv.length; i++) {
+      var p = pv[i];
+      if (p.porta === scelta.porta) continue;
+      if (Math.hypot(p.px - scelta.px, p.py - scelta.py) > raggio) continue;
+      // due usci che portano allo stesso posto sono UNA scelta sola: elencarli
+      // due volte con la stessa etichetta non aiuta nessuno
+      if (visti[chiavePorta(p.porta)]) continue;
+      visti[chiavePorta(p.porta)] = 1;
+      out.push(p.porta);
+    }
+    return out;
+  }
+
+  // Le uscite, senza doppioni per destinazione (un Centro ne ha due sullo
+  // stesso tappeto, e nel menu comparivano due righe identiche).
+  function usciteDistinte() {
+    var visti = {}, out = [];
+    uscite().forEach(function (w) {
+      if (visti[w.a]) return;
+      visti[w.a] = 1;
+      out.push(w);
+    });
+    return out;
+  }
+
+  function descriviPorta(w) {
+    if (w.dinamica) return t("dinamica");
+    var dest = dati.mappe[w.a];
+    if (w.stessa) return t("stessaMappa") + " (" + w.ax + "," + w.ay + ")";
+    return t(w.tipo) + ": " + (dest ? nomeMappa(dest) : w.nome) + (w.evento ? " (" + t("viaEvento") + ")" : "") + " \u2014 " + t("clicMappa");
+  }
+
+  function attraversa(w) {
+    if (w.dinamica || !w.a) return;
+    // PASSAGGIO INTERNO (2026-08-25): la mappa e' la stessa, cambia il
+    // punto. Si sposta la vista sull'arrivo tenendo la cronologia, cosi'
+    // 'Indietro' riporta dov'eri. Prima questi warp erano scartati del
+    // tutto e la camera dei Regi risultava irraggiungibile.
+    if (w.stessa) {
+      cronologia.push({ vista: { tipo: vista.tipo, id: vista.id, key: vista.key },
+                        cx: cx, cy: cy, z: z, sel: selezionata });
+      if (cronologia.length > 40) cronologia.shift();
+      segui = ""; $("sel-segui").value = "";
+      chiudiScheda(); chiudiPannello();
+      centraSu(w.a, w.ax, w.ay, Math.max(z, 2.2));
+      selezionata = w.a;
+      mostraMappa(w.a);
+      aggiornaNav();
+      return;
+    }   // l'uscita "da dove sei entrato" non ha una destinazione fissa
+    chiudiScheda(); chiudiPannello();
+    cronologia.push({ vista: { tipo: vista.tipo, id: vista.id, key: vista.key },
+                      cx: cx, cy: cy, z: z, sel: selezionata });
+    if (cronologia.length > 40) cronologia.shift();
+    segui = ""; $("sel-segui").value = "";
+    var k = w.a, m = mappaDi(k);
+    if (!m) return;
+    selezionata = k;
+    impostaVista(m.mondo ? { tipo: "mondo", id: m.mondo } : { tipo: "mappa", key: k }, false);
+    centraSu(k, w.ax === null ? undefined : w.ax, w.ay === null ? undefined : w.ay,
+             Math.max(z, m.esterno ? 1.5 : 2.2));
+    mostraMappa(k);
+    aggiornaNav();
+  }
+
+  function indietro() {
+    var v = cronologia.pop();
+    if (!v) return;
+    vista = v.vista.tipo === "mondo" ? { tipo: "mondo", id: v.vista.id } : { tipo: "mappa", key: v.vista.key };
+    $("sel-mondo").value = vista.tipo === "mondo" ? "mondo:" + vista.id : "mappa:" + vista.key;
+    cx = v.cx; cy = v.cy; z = v.z; selezionata = v.sel;
+    if (selezionata) mostraMappa(selezionata);
+    dirty = true;
+    aggiornaNav();
+  }
+
+  function uscite() {
+    if (!dati || !vista || vista.tipo !== "mappa") return [];
+    var m = mappaDi(vista.key);
+    if (!m) return [];
+    return (m.porte || []).filter(function (w) { return w.tipo === "esce"; });
+  }
+
+  function aggiornaNav() {
+    var dove = $("nav-dove"), bi = $("btn-indietro"), be = $("btn-esci");
+    if (!dati || !vista) return;
+    dove.textContent = vista.tipo === "mondo"
+      ? (dati.mondi[vista.id] ? nomeMondo(dati.mondi[vista.id]) : vista.id)
+      : nomeMappaK(vista.key);
+    bi.classList.toggle("nascosto", cronologia.length === 0);
+    var u = uscite();
+    be.classList.toggle("nascosto", u.length === 0);
+  }
+
+  // il menu delle porte
+  function chiudiScelta() { $("scelta").style.display = "none"; }
+  function apriScelta(px, py, titolo, elenco) {
+    var el = $("scelta");
+    var h = "<div class=tit>" + titolo + "</div>";
+    elenco.forEach(function (w, i) {
+      var dest = dati.mappe[w.a];
+      var eti = w.stessa ? (t("stessaMappa") + " (" + w.ax + "," + w.ay + ")")
+                         : (w.dinamica ? t("dinamica") : (dest ? nomeMappa(dest) : w.nome));
+      h += "<button data-i='" + i + "'><i style='background:" + (w.stessa ? PORTA_STESSA_COL : (PORTA_COL[w.tipo] || "#2f6bc0")) + "'>"
+        + (PORTA_FRECCIA[w.tipo] || "\u2192") + "</i><span>" + eti + "</span></button>";
+    });
+    el.innerHTML = h;
+    el.style.display = "block";
+    var r = $("tela-box").getBoundingClientRect();
+    el.style.left = Math.min(px + 8, r.width - el.offsetWidth - 8) + "px";
+    el.style.top = Math.min(py + 8, r.height - el.offsetHeight - 8) + "px";
+    Array.prototype.forEach.call(el.querySelectorAll("button"), function (b) {
+      b.onclick = function () { chiudiScelta(); attraversa(elenco[+b.getAttribute("data-i")]); };
+    });
+  }
+
+  $("btn-indietro").onclick = indietro;
+  $("btn-esci").onclick = function () {
+    var u = usciteDistinte();
+    if (u.length === 1) return attraversa(u[0]);
+    if (u.length > 1) {
+      var r = $("btn-esci").getBoundingClientRect(), b = $("tela-box").getBoundingClientRect();
+      apriScelta(r.left - b.left, r.bottom - b.top, t("uscite"), u);
+    }
+  };
+  window.addEventListener("keydown", function (e) {
+    var n = e.target && e.target.tagName;
+    if (n === "INPUT" || n === "SELECT" || n === "TEXTAREA") return;
+    if (e.key === "Escape") {
+      // prima si chiude quello che e' aperto sopra la mappa; solo se non c'e'
+      // niente di aperto, Esc torna indietro
+      e.preventDefault();
+      var qualcosa = $("scheda").style.display === "block"
+        || $("pannello-dx").classList.contains("aperto")
+        || $("scelta").style.display === "block";
+      chiudiScelta(); chiudiScheda(); chiudiPannello();
+      if (!qualcosa) indietro();
+      return;
+    }
+    if (e.key === "Backspace") { e.preventDefault(); chiudiScelta(); indietro(); }
+  });
+
+  // ---------------------------------------------------------------- interazione
+  var drag = null, mosso = false;
+  tela.addEventListener("mousedown", function (e) { drag = { x: e.clientX, y: e.clientY, cx: cx, cy: cy }; mosso = false; tela.classList.add("drag"); });
+  window.addEventListener("mousemove", function (e) {
+    if (drag) {
+      var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) mosso = true;
+      cx = drag.cx - dx / z; cy = drag.cy - dy / z; dirty = true;
+      if (mosso) { segui = ""; $("sel-segui").value = ""; }
+    } else tooltip(e);
+  });
+  window.addEventListener("mouseup", function (e) {
+    if (!drag) return;
+    tela.classList.remove("drag");
+    if (!mosso) clic(e);
+    drag = null;
+  });
+  tela.addEventListener("wheel", function (e) {
+    e.preventDefault(); chiudiScelta();
+    var r = tela.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+    var gxx = gx(px), gyy = gy(py);
+    var f = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+    z = Math.max(0.03, Math.min(8, z * f));
+    cx = gxx - (px - tela.clientWidth / 2) / z; cy = gyy - (py - tela.clientHeight / 2) / z;
+    dirty = true;
+  }, { passive: false });
+  function zooma(f) { z = Math.max(0.03, Math.min(8, z * f)); dirty = true; }
+  $("btn-piu").onclick = function () { zooma(1.35); };
+  $("btn-meno").onclick = function () { zooma(1 / 1.35); };
+  var tocchi = null;
+  tela.addEventListener("touchstart", function (e) {
+    if (e.touches.length === 1) { var tt = e.touches[0]; drag = { x: tt.clientX, y: tt.clientY, cx: cx, cy: cy }; mosso = false; }
+    else if (e.touches.length === 2) { tocchi = { d: dist(e.touches), z: z }; drag = null; }
+  }, { passive: true });
+  tela.addEventListener("touchmove", function (e) {
+    if (e.touches.length === 1 && drag) { var tt = e.touches[0]; cx = drag.cx - (tt.clientX - drag.x) / z; cy = drag.cy - (tt.clientY - drag.y) / z; dirty = true; }
+    else if (e.touches.length === 2 && tocchi) { z = Math.max(0.03, Math.min(8, tocchi.z * dist(e.touches) / tocchi.d)); dirty = true; }
+  }, { passive: true });
+  tela.addEventListener("touchend", function () { drag = null; tocchi = null; });
+  function dist(tt) { var dx = tt[0].clientX - tt[1].clientX, dy = tt[0].clientY - tt[1].clientY; return Math.sqrt(dx * dx + dy * dy); }
+
+  function mappaSotto(px, py) {
+    var gxx = gx(px) / T, gyy = gy(py) / T;
+    var chiavi = mappeDellaVista();
+    for (var i = chiavi.length - 1; i >= 0; i--) {
+      var k = chiavi[i], m = mappaDi(k), o = origine(k);
+      if (gxx >= o.x && gyy >= o.y && gxx < o.x + m.w && gyy < o.y + m.h) return { key: k, tx: Math.floor(gxx - o.x), ty: Math.floor(gyy - o.y) };
+    }
+    return null;
+  }
+
+  function strumentoSotto(px, py) {
+    if (!mostraStrumenti) return null;
+    var chiavi = mappeDellaVista(), best = null, bd = Math.max(10, T * z * 0.8);
+    for (var j = 0; j < chiavi.length; j++) {
+      var km = chiavi[j], mm = mappaDi(km), oo = origine(km);
+      for (var s = 0; s < mm.strumenti.length; s++) {
+        var it = mm.strumenti[s];
+        var d = Math.hypot(sx((oo.x + it.x + 0.5) * T) - px, sy((oo.y + it.y + 0.5) * T) - py);
+        if (d < bd) { bd = d; best = { item: it, mappa: mm, key: km }; }
+      }
+    }
+    return best;
+  }
+
+  function personaggioSotto(px, py) {
+    if (!mostraPersonaggi) return null;
+    var chiavi = mappeDellaVista(), best = null, bd = Math.max(10, T * z);
+    for (var j = 0; j < chiavi.length; j++) {
+      var km = chiavi[j], mm = mappaDi(km), oo = origine(km);
+      for (var q = 0; q < mm.personaggi.length; q++) {
+        var pe = mm.personaggi[q];
+        var d = Math.hypot(sx((oo.x + pe.x + 0.5) * T) - px, sy((oo.y + pe.y + 0.5) * T) - py);
+        if (d < bd) { bd = d; best = { pers: pe, mappa: mm, key: km }; }
+      }
+    }
+    return best;
+  }
+
+  // I doni di un personaggio, nella lingua scelta (doni_c porta le costanti).
+  function nomiDoni(pe) {
+    if (!pe.doni) return [];
+    return pe.doni.map(function (n, i) {
+      var c = pe.doni_c && pe.doni_c[i];
+      return c ? G("items", c, n) : n;
+    });
+  }
+
+  // Gli stessi doni, ma CON L'ICONA VERA accanto al nome (richiesta di Lain,
+  // 2026-08-25: nella schedina si leggeva solo il testo e bisognava
+  // indovinare che oggetto fosse). L'icona e' quella del gioco, gia'
+  // esportata da gen_mappa.py; se per quel dono manca la costante si mostra
+  // il solo nome invece di un buco.
+  function donoChip(nome, cost, lato) {
+    lato = lato || 20;
+    var img = (cost && dati.item && dati.item[cost])
+      ? "<img class=itm src='mappa/" + dati.item[cost] + "' alt='' style='width:" + lato
+        + "px;height:" + lato + "px;vertical-align:-4px;margin-right:4px'>"
+      : "";
+    return "<span class=dono-chip>" + img + nome + "</span>";
+  }
+  function doniConIcona(pe, lato) {
+    var nomi = nomiDoni(pe);
+    return nomi.map(function (n, i) {
+      return donoChip(n, pe.doni_c && pe.doni_c[i], lato);
+    }).join("");
+  }
+
+  function descriviPersonaggio(pe) {
+    var nome = nomePersonaggio(pe);
+    if (pe.squadra && pe.squadra.length)
+      nome += " \u2014 " + pe.squadra.map(function (s) { return nomeSpecie(s.specie, s.cost) + " " + t("lvl") + s.lv; }).join(", ");
+    if (pe.doni) nome += " \u2014 " + t("dono") + ": " + nomiDoni(pe).join(", ");
+    if (pe.tipo === "allenatore" && pe.soldi) nome += " \u2014 " + t("premio") + " " + pe.soldi + " \u00a5";
+    return nome;
+  }
+
+  function giocatoreSotto(px, py) {
+    for (var p = 0; p < giocatori.length; p++) {
+      var g = giocatori[p], og = origine(chiaveDi(g.gruppo, g.numero));
+      if (!og) continue;
+      var bx = sx((og.x + g.x - MAP_OFFSET + 0.5) * T), by = sy((og.y + g.y - MAP_OFFSET) * T);
+      if (Math.abs(bx - px) < Math.max(8, T * z) && py > by - 2 * T * z - 20 && py < by + T * z) return g;
+    }
+    return null;
+  }
+
+  function tooltip(e) {
+    var r = tela.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+    var tip = $("tip");
+    if (px < 0 || py < 0 || px > r.width || py > r.height || !dati || !vista) { tip.style.display = "none"; return; }
+    var testo = "", cursore = false;
+    var po = porteSotto(px, py);
+    var g = po.length ? null : giocatoreSotto(px, py);
+    if (po.length) {
+      cursore = true;
+      var comp = porteCompagne(po[0]);
+      testo = comp.length === 1 ? descriviPorta(comp[0])
+        : comp.length + " " + t("porte").toLowerCase() + " \u2014 " + t("clicMappa");
+    } else if (g) {
+      testo = g.label + " · " + nomeMappaK(chiaveDi(g.gruppo, g.numero)) + " (" + (g.x - MAP_OFFSET) + "," + (g.y - MAP_OFFSET) + ")";
+    } else {
+      var st = strumentoSotto(px, py), ps = personaggioSotto(px, py);
+      if (st && (!ps || st.item.dono !== true)) {
+        cursore = true;
+        testo = (st.item.nascosto ? t("nascosto") + ": " : st.item.dono ? t("dono") + ": " : "")
+          + nomeItem(st.item) + " · " + nomeMappa(st.mappa);
+      } else if (ps) {
+        cursore = true;
+        testo = descriviPersonaggio(ps.pers) + " · " + nomeMappa(ps.mappa);
+      } else {
+        var ms = mappaSotto(px, py);
+        if (ms) {
+          var pd = portaDiveSuTile(ms.key, ms.tx, ms.ty);
+          if (pd) { cursore = true; testo = descriviPorta(pd); }
+          else testo = nomeMappaK(ms.key) + " (" + ms.tx + "," + ms.ty + ")";
+        }
+      }
+    }
+    tela.classList.toggle("mano", cursore);
+    if (!testo) { tip.style.display = "none"; return; }
+    tip.textContent = testo; tip.style.display = "block";
+    tip.style.left = Math.min(px + 14, r.width - 310) + "px"; tip.style.top = (py + 14) + "px";
+  }
+
+  // La porta di immersione/riemersione della mappa, se il tile cliccato e'
+  // acqua fonda: ci si immerge da QUALUNQUE tile profondo, quindi tutti i
+  // tile `sub` navigano come il pin.
+  function portaDiveSuTile(key, tx, ty) {
+    var m = mappaDi(key);
+    if (!m || !m.sub || !m.sub.length) return null;
+    if (!m._subSet) {
+      m._subSet = {};
+      for (var i = 0; i < m.sub.length; i++) m._subSet[m.sub[i][0] + "," + m.sub[i][1]] = 1;
+    }
+    if (!m._subSet[tx + "," + ty]) return null;
+    var porte = m.porte || [];
+    for (var j = 0; j < porte.length; j++) {
+      if (porte[j].tipo === "immersione" || porte[j].tipo === "riemersione") return porte[j];
+    }
+    return null;
+  }
+
+  function clic(e) {
+    var r = tela.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+    chiudiScelta();
+    // 1) le porte vincono: sono controlli sovrapposti alla mappa
+    var po = porteSotto(px, py);
+    if (po.length) {
+      var comp = porteCompagne(po[0]);
+      if (comp.length === 1) {
+        if (comp[0].dinamica) {
+          // niente destinazione fissa: si spiega, non si naviga
+          var tip = $("tip");
+          tip.textContent = t("dinamica"); tip.style.display = "block";
+          tip.style.left = Math.min(px + 14, r.width - 310) + "px"; tip.style.top = (py + 14) + "px";
+          setTimeout(function () { tip.style.display = "none"; }, 2500);
+          return;
+        }
+        return attraversa(comp[0]);
+      }
+      return apriScelta(px, py, t("scegli"), comp);
+    }
+    // 2) un personaggio: schedina qui accanto, piu' la scheda intera nel fianco
+    var ps = personaggioSotto(px, py);
+    if (ps) { apriSchedaPersonaggio(ps.pers, ps.key, px, py); mostraPersonaggio(ps.pers, ps.key); return; }
+    chiudiScheda();
+    // 3) uno strumento - se sulla stessa cella ce n'e' piu' d'uno (il
+    // distintivo xN), si sceglie da un menu invece di prendere il primo
+    var st = strumentoSotto(px, py);
+    if (st) {
+      var mm2 = mappaDi(st.key), stessi = [];
+      for (var q3 = 0; q3 < mm2.strumenti.length; q3++) {
+        var alt = mm2.strumenti[q3];
+        if (alt.x === st.item.x && alt.y === st.item.y) stessi.push(alt);
+      }
+      if (stessi.length > 1) return apriSceltaStrumenti(px, py, stessi, st.key);
+      mostraStrumento(st.item, st.key);
+      return;
+    }
+    // 4) l'acqua fonda: qualunque tile `sub` naviga come il pin di immersione
+    var ms = mappaSotto(px, py);
+    if (ms) {
+      var pd = portaDiveSuTile(ms.key, ms.tx, ms.ty);
+      if (pd) return attraversa(pd);
+      // 5) la zona: il pannello a destra coi Pokemon che ci vivono
+      selezionata = ms.key; mostraMappa(ms.key); apriPannelloMappa(ms.key);
+      dirty = true; aggiornaNav();
+    }
+  }
+
+  // il menu degli strumenti sovrapposti: stessa faccia del menu delle porte
+  function apriSceltaStrumenti(px, py, elenco, key) {
+    var el = $("scelta");
+    var h = "<div class=tit>" + t("cosaCella") + "</div>";
+    elenco.forEach(function (s, i) {
+      var img = dati.item && s.c && dati.item[s.c]
+        ? "<img src='mappa/" + dati.item[s.c] + "' style='width:16px;height:16px;image-rendering:pixelated;vertical-align:-3px'> " : "";
+      h += "<button data-i='" + i + "'>" + img + "<span>" + nomeItem(s)
+        + (s.nascosto ? " (" + t("nascosto") + ")" : s.dono ? " (" + t("dono") + ")" : "") + "</span></button>";
+    });
+    el.innerHTML = h;
+    el.style.display = "block";
+    var r = $("tela-box").getBoundingClientRect();
+    el.style.left = Math.min(px + 8, r.width - el.offsetWidth - 8) + "px";
+    el.style.top = Math.min(py + 8, r.height - el.offsetHeight - 8) + "px";
+    Array.prototype.forEach.call(el.querySelectorAll("button"), function (b) {
+      b.onclick = function () { chiudiScelta(); mostraStrumento(elenco[+b.getAttribute("data-i")], key); };
+    });
+  }
+  $("tela-box").addEventListener("mousedown", function (e) { if (e.target === tela) chiudiScelta(); });
+
+  // ---------------------------------------------------------------- pannello
+  function costruisciSelettoreMondi() {
+    var sel = $("sel-mondo");
+    var mondi = Object.keys(dati.mondi).sort(function (a, b) { return a === "hoenn" ? -1 : b === "hoenn" ? 1 : dati.mondi[a].nome.localeCompare(dati.mondi[b].nome); });
+    var val = sel.value;
+    sel.innerHTML = "";
+    var og = document.createElement("optgroup"); og.label = lang === "it" ? "Mondi" : "Worlds";
+    mondi.forEach(function (id) {
+      var o = document.createElement("option"); o.value = "mondo:" + id;
+      o.textContent = nomeMondo(dati.mondi[id]) + " · " + dati.mondi[id].mappe.length + " " + t("mappe");
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+    var og2 = document.createElement("optgroup"); og2.label = lang === "it" ? "Singole mappe" : "Single maps";
+    Object.keys(dati.mappe).sort(function (a, b) { return nomeMappaK(a).localeCompare(nomeMappaK(b)); })
+      .forEach(function (k) {
+        var o = document.createElement("option"); o.value = "mappa:" + k;
+        o.textContent = nomeMappaK(k) + "  [" + k + "]";
+        og2.appendChild(o);
+      });
+    sel.appendChild(og2);
+    if (val) sel.value = val;
+    sel.onchange = function () {
+      var v = sel.value.split(":");
+      chiudiScheda(); chiudiPannello();
+      cronologia = [];
+      impostaVista(v[0] === "mondo" ? { tipo: "mondo", id: v[1] } : { tipo: "mappa", key: v[1] }, true);
+      aggiornaNav();
+    };
+  }
+
+  function collegaControlli() {
+    $("btn-fit").onclick = adatta;
+    $("ck-strumenti").onchange = function () { mostraStrumenti = this.checked; dirty = true; };
+    $("ck-nomi").onchange = function () { mostraNomi = this.checked; dirty = true; };
+    $("ck-griglia").onchange = function () { mostraGriglia = this.checked; dirty = true; };
+    $("ck-personaggi").onchange = function () { mostraPersonaggi = this.checked; dirty = true; };
+    $("ck-porte").onchange = function () { mostraPorte = this.checked; dirty = true; };
+    $("sel-segui").onchange = function () { segui = this.value; seguiAdesso(); };
+    $("cerca").oninput = aggiornaRisultati;
+    Array.prototype.forEach.call(document.querySelectorAll(".segm button"), function (b) {
+      b.onclick = function () {
+        Array.prototype.forEach.call(document.querySelectorAll(".segm button"), function (x) { x.className = ""; });
+        b.className = "on";
+        modoCerca = b.getAttribute("data-c");
+        $("cerca").placeholder = t(modoCerca === "mappe" ? "phMappe" : modoCerca === "specie" ? "phSpecie" : "phAll");
+        aggiornaRisultati();
+      };
+    });
+  }
+
+  function disegnaLegenda() {
+    var L = [
+      ["<img class=itm src='mappa/" + ((dati && dati.item && dati.item.ITEM_POTION) || "item/POTION.png") + "'>", t("legTerra")],
+      ["<i class=q style='background:#e8c020;transform:rotate(45deg)'></i>", t("legNasc")],
+      ["<i style='box-shadow:0 0 0 2px #ff9b3b inset'></i>", t("legDono")],
+      ["<i style='background:#ff3b3b;box-shadow:0 0 0 1px #fff'></i>", t("legAll")],
+      ["<i style='background:#f2ede1'></i>", t("legNpc")],
+      ["<i style='background:#7fb2ff'></i>", t("legTu")],
+      ["<i style='background:#3fd68f'></i>", t("legAmico")],
+      ["<i class=q style='background:" + PORTA_COL.entra + "'></i>", t("legEntra")],
+      ["<i class=q style='background:" + PORTA_COL.esce + "'></i>", t("legEsce")],
+      ["<i class=q style='background:" + PORTA_COL.interno + "'></i>", t("legInterno")],
+      ["<i class=q style='background:" + PORTA_COL.altrove + "'></i>", t("legAltrove")],
+      ["<i class=q style='background:" + PORTA_COL.immersione + "'></i>", t("legImm")],
+      ["<i class=q style='background:" + PORTA_COL.riemersione + "'></i>", t("legRiem")],
+      ["<i class=q style='background:" + PORTA_COL.base + "'></i>", t("legBase")],
+      ["<i style='background:rgba(13,143,184,.5)'></i>", t("legSub")],
+      ["<i style='background:rgba(64,196,222,.6)'></i>", t("legFeebas")],
+      ["<i style='background:#e8c020'></i>", t("legFeebas6")],
+      ["<i class=q style='background:transparent;border:2px dashed #ffcf3d'></i>", t("legSat")],
+      ["<i class=q style='background:" + PORTA_STESSA_COL + "'></i>", t("stessaMappa")],
+      ["<i style='background:#ffcf3d'></i>", t("legSbarco")]
+    ];
+    $("legenda").innerHTML = L.map(function (v) { return "<span>" + v[0] + v[1] + "</span>"; }).join("")
+      + "<span style='grid-column:1/-1;color:var(--tenue2);font-size:11px'>" + t("daVicino") + "</span>";
+  }
+
+  // ------------------------------------------------------------- ricerca
+  function costruisciIndiceAllenatori() {
+    if (indiceAllenatori) return indiceAllenatori;
+    indiceAllenatori = [];
+    Object.keys(dati.mappe).forEach(function (k) {
+      (dati.mappe[k].personaggi || []).forEach(function (p) {
+        if (p.tipo === "allenatore") indiceAllenatori.push({ p: p, key: k });
+      });
+    });
+    return indiceAllenatori;
+  }
+
+  function aggiornaRisultati() {
+    var q = ($("cerca").value || "").trim().toLowerCase();
+    var ul = $("risultati"); ul.innerHTML = "";
+    if (modoCerca !== "specie") { evidenziate = {}; dirty = true; }
+    if (modoCerca === "mappe") {
+      var chiavi = Object.keys(dati.mappe).filter(function (k) {
+        return !q || nomeMappaK(k).toLowerCase().indexOf(q) >= 0 || k === q;
+      });
+      chiavi.sort(function (a, b) {
+        var ma = dati.mappe[a], mb = dati.mappe[b];
+        return (mb.esterno - ma.esterno) || nomeMappaK(a).localeCompare(nomeMappaK(b));
+      });
+      chiavi.slice(0, 300).forEach(function (k) {
+        var li = document.createElement("li");
+        li.innerHTML = "<span class=sx><span>" + nomeMappaK(k) + "</span></span><span class=muto>" + k + "</span>";
+        li.onclick = function () { selezionata = k; centraSu(k, undefined, undefined, Math.max(z, 1)); mostraMappa(k); aggiornaNav(); };
+        ul.appendChild(li);
+      });
+    } else if (modoCerca === "specie") {
+      evidenziate = {}; dirty = true;
+      if (!q) return;
+      var nomi = Object.keys(dati.specie).filter(function (n) {
+        var s = dati.specie[n];
+        return n.toLowerCase().indexOf(q) >= 0 || nomeSpecie(n, s.cost).toLowerCase().indexOf(q) >= 0;
+      }).sort();
+      nomi.slice(0, 60).forEach(function (n) {
+        var s = dati.specie[n], li = document.createElement("li");
+        li.innerHTML = "<span class=sx>" + (s.icona ? "<img class=ic src='mappa/" + s.icona + "'>" : "")
+          + "<span>" + nomeSpecie(n, s.cost) + "</span></span><span class=muto>" + s.dove.length + " " + t("luoghi") + "</span>";
+        li.onclick = function () { mostraSpecie(n); };
+        ul.appendChild(li);
+      });
+      if (nomi.length === 1) mostraSpecie(nomi[0]);
+    } else {
+      if (!q) return;
+      var idx = costruisciIndiceAllenatori().filter(function (v) {
+        return nomeAllenatore(v.p).toLowerCase().indexOf(q) >= 0 || v.p.nome.toLowerCase().indexOf(q) >= 0;
+      });
+      idx.slice(0, 80).forEach(function (v) {
+        var li = document.createElement("li");
+        var ge = dati.oe[v.p.gfx];
+        li.innerHTML = "<span class=sx>" + (ge && ge.img.giu ? "<img class=oe src='mappa/" + ge.img.giu + "' style='width:16px;height:22px'>" : "")
+          + "<span>" + nomeAllenatore(v.p) + "</span></span><span class=muto>" + nomeMappaK(v.key) + "</span>";
+        li.onclick = function () { mostraPersonaggio(v.p, v.key); vaiA(v.key, v.p.x, v.p.y); };
+        ul.appendChild(li);
+      });
+      if (!idx.length) ul.innerHTML = "<li><span class=muto>" + t("niente") + "</span></li>";
+    }
+  }
+
+  function vaiA(key, tx, ty) {
+    if (!origine(key)) {
+      var m = dati.mappe[key];
+      cronologia.push({ vista: { tipo: vista.tipo, id: vista.id, key: vista.key }, cx: cx, cy: cy, z: z, sel: selezionata });
+      impostaVista(m.mondo ? { tipo: "mondo", id: m.mondo } : { tipo: "mappa", key: key }, false);
+    }
+    selezionata = key;
+    centraSu(key, tx, ty, Math.max(z, 2));
+    aggiornaNav();
+  }
+
+  // ------------------------------------------------------------- dettagli
+  function bottoneTorna(key) {
+    return "<span class='torna-su' data-vai='" + key + "'>\u2039 " + nomeMappaK(key) + "</span>";
+  }
+  function collegaTorna() {
+    Array.prototype.forEach.call($("dett").querySelectorAll("[data-vai]"), function (el) {
+      el.onclick = function () { var k = el.getAttribute("data-vai"); selezionata = k; mostraMappa(k); centraSu(k, undefined, undefined, Math.max(z, 1)); aggiornaNav(); };
+    });
+  }
+
+  // UN Pokemon animato, alla misura che si chiede. Prima la GIF di
+  // Nero/Bianco 2 (animazione vera), poi i due fotogrammi della decomp, poi
+  // l'icona: cosi' la pagina non resta mai senza figura.
+  function monAnimato(cost, lato) {
+    var bw = dati.bw && dati.bw[cost];
+    if (bw) return "<img class='monbw' src='mappa/" + bw + "' style='width:" + lato + "px;height:" + lato + "px'>";
+    var f = dati.front && dati.front[cost];
+    if (f) return "<div class='mon' style=\"background-image:url('mappa/" + f.img
+      + "');width:" + lato + "px;height:" + lato + "px\"></div>";
+    var ic = dati.icone && dati.icone[cost];
+    return ic ? "<img class='ic' src='mappa/" + ic + "' style='width:" + lato + "px;height:" + lato + "px'>" : "";
+  }
+
+  function monBox(s) {
+    var extra = "";
+    if (s.tiene)
+      extra += "<div class='lv'>" + t("tiene") + ": "
+        + (dati.item && dati.item[s.tiene] ? "<img class=itm style='width:14px;height:14px;vertical-align:-2px' src='mappa/" + dati.item[s.tiene] + "'> " : "")
+        + nomeItemC(s.tiene) + "</div>";
+    if (s.mosse && s.mosse.length)
+      extra += "<div class='lv' style='color:var(--tenue2);font-size:11px;line-height:1.35'>"
+        + s.mosse.map(nomeMossa).join(" · ") + "</div>";
+    return "<div class='mon-box'>" + monAnimato(s.cost, 64)
+      + "<div class='nm'>" + nomeSpecie(s.specie, s.cost) + "</div>"
+      + "<div class='lv'>" + t("lvl") + " " + s.lv + "</div>" + extra + "</div>";
+  }
+
+  // ---------------------------------------------------- la schedina al volo
+  // Chiesta da Lain: cliccando un personaggio deve aprirsi UNA SCHEDINA LI'
+  // ACCANTO che dice chi e' e che Pokemon ha - senza dover andare a cercare
+  // nel fianco. Il fianco continua a riempirsi lo stesso (c'e' il resto:
+  // doni, "vai qui", la mappa intera), ma non e' piu' l'unico posto.
+  function chiudiScheda() { $("scheda").style.display = "none"; }
+
+  function apriSchedaPersonaggio(pe, key, px, py) {
+    var el = $("scheda"), ge = dati.oe[pe.gfx];
+    var h = "<div class='testa'>";
+    if (ge && ge.img.giu)
+      h += "<img class=oe src='mappa/" + ge.img.giu + "' style='width:" + Math.min(34, ge.w * 1.6)
+        + "px;height:" + Math.min(46, ge.h * 1.6) + "px'>";
+    h += "<div>";
+    if (pe.tipo === "allenatore" && pe.cc)
+      h += "<div class=cl>" + G("classi", pe.cc, pe.nome.split(" ")[0]) + "</div>"
+        + "<div class=nm>" + (G("trainers", pe.tc, pe.nome.split(" ").slice(1).join(" ")) || pe.nome) + "</div>";
+    else
+      h += "<div class=nm>" + nomePersonaggio(pe) + "</div>";
+    h += "<div class=cl>" + nomeMappaK(key) + " (" + pe.x + "," + pe.y + ")</div></div>";
+    h += "<button class='x' data-chiudi='1'>\u00D7</button></div>";
+    h += "<div class='corpo'>";
+    if (pe.squadra && pe.squadra.length) {
+      h += "<div class='mons'>";
+      pe.squadra.forEach(function (m) {
+        h += "<div class='m'>" + monAnimato(m.cost, 62)
+          + "<div class='nm'>" + nomeSpecie(m.specie, m.cost) + "</div>"
+          + "<div class='lv'>" + t("lvl") + " " + m.lv + "</div></div>";
+      });
+      h += "</div>";
+      // Le rivincite anche qui, ma strette: la schedina e' piccola e sta
+      // accanto al puntatore. Aprendola cambia altezza, e posiziona() l'ha
+      // gia' misurata: si ri-posiziona all'ontoggle, piu' sotto.
+      if (pe.rematch && pe.rematch.length) {
+        h += "<details class='sez' data-rem='1' style='margin-top:6px'><summary>"
+          + t("rivincite", pe.rematch.length) + "</summary>";
+        pe.rematch.forEach(function (r, i) {
+          h += "<div class=muto style='margin-top:4px'>" + t("rivincita", i + 1) + "</div>";
+          h += "<div class='mons'>";
+          r.squadra.forEach(function (m) {
+            h += "<div class='m'>" + monAnimato(m.cost, 62)
+              + "<div class='nm'>" + nomeSpecie(m.specie, m.cost) + "</div>"
+              + "<div class='lv'>" + t("lvl") + " " + m.lv + "</div></div>";
+          });
+          h += "</div>";
+        });
+        h += "</details>";
+      }
+    } else if (pe.doni && pe.doni.length) {
+      h += "<div class=muto>" + t("dono") + ":</div><div>" + doniConIcona(pe, 22) + "</div>";
+    } else {
+      h += "<div class=muto>" + t("nienteSquadra") + "</div>";
+    }
+    if (pe.tipo === "allenatore" && pe.soldi)
+      h += "<div class=muto>" + t("premio") + ": <b>" + pe.soldi + " ¥</b>"
+        + (pe.doppia ? " · " + t("doppia") : "") + "</div>";
+    if (pe.tipo === "allenatore" && pe.doni && pe.doni.length)
+      h += "<div class=muto>" + t("ricompensa") + ":</div><div>" + doniConIcona(pe, 22) + "</div>";
+    h += "</div>";
+    el.innerHTML = h;
+    el.style.display = "block";
+    posiziona(el, px, py);
+    el.querySelector("[data-chiudi]").onclick = chiudiScheda;
+    // Aprendo le rivincite la schedina cresce: se era stata messa in basso,
+    // uscirebbe dal riquadro. Si rimisura appena cambia.
+    var rem = el.querySelector("[data-rem]");
+    if (rem) rem.ontoggle = function () { posiziona(el, px, py); };
+  }
+
+  // dentro il riquadro della tela, e mai sopra il puntatore
+  function posiziona(el, px, py) {
+    var r = $("tela-box").getBoundingClientRect();
+    var x = px + 14, y = py + 14;
+    if (x + el.offsetWidth > r.width - 8) x = px - el.offsetWidth - 14;
+    if (y + el.offsetHeight > r.height - 8) y = Math.max(8, r.height - el.offsetHeight - 8);
+    el.style.left = Math.max(8, x) + "px";
+    el.style.top = Math.max(8, y) + "px";
+  }
+
+  // ------------------------------------------------ il pannello a destra
+  // "Stessa cosa per il percorso e i Pokemon che ci sono li'": cliccando una
+  // zona si apre a destra l'elenco di cosa ci vive, sempre animato, diviso per
+  // come lo si incontra (erba, acqua, pesca, spaccaroccia).
+  function chiudiPannello() { $("pannello-dx").classList.remove("aperto"); }
+
+  function apriPannelloMappa(key) {
+    var m = dati.mappe[key];
+    if (!m) return;
+    var el = $("pannello-dx");
+    var metodi = Object.keys(m.selvatici || {});
+    var h = "<div class='testa'><div><div class='nm'>" + nomeMappa(m) + "</div>"
+      + "<div class='su'>" + m.w + "\u00D7" + m.h + " " + t("tile")
+      + " \u00B7 " + m.strumenti.length + " " + t("strumenti").toLowerCase()
+      + " \u00B7 " + m.personaggi.filter(function (p) { return p.tipo === "allenatore"; }).length
+      + " " + t("allenatori").toLowerCase() + "</div></div>"
+      + "<button class='x' data-chiudi='1'>\u00D7</button></div><div class='corpo'>";
+    if (!metodi.length) {
+      h += "<div class=muto>" + t("nienteSelvatici") + "</div>";
+    } else {
+      metodi.forEach(function (met) {
+        var v = m.selvatici[met];
+        h += "<h5>" + met + " \u00B7 " + t("tasso") + " " + v.tasso + "</h5>";
+        v.specie.forEach(function (sp) {
+          var spd = dati.specie[sp.specie];
+          var cost = sp.cost || (spd && spd.cost);
+          // LO STRUMENTO CHE TIENE ADDOSSO. Le percentuali non sono
+          // inventate: SetWildMonHeldItem (src/pokemon.c) tira Random()%100
+          // con le soglie 45 e 95, quindi 50% il comune e 5% il raro; se i due
+          // slot hanno lo STESSO strumento c'e' un ramo apposta che lo da'
+          // sempre (100%). Le calcola gen_mappa.py, qui si disegnano.
+          var ten = "";
+          if (sp.tenuti && sp.tenuti.length) {
+            ten = "<div class=ten>";
+            sp.tenuti.forEach(function (it) {
+              var ic = iconaItem(it);
+              ten += "<span class=t1 title='" + t("tieneT") + "'>"
+                   + (ic ? "<img class=px src='" + ic.src + "' alt=''>" : "")
+                   + nomeItem(it) + " <b>" + it.pct + "%</b></span>";
+            });
+            ten += "</div>";
+          }
+          h += "<div class='zmon' data-sp='" + sp.specie + "'>" + monAnimato(cost, 48)
+            + "<div class=chi><div class=nm>" + nomeSpecie(sp.specie, cost) + "</div>"
+            + "<div class=dt>" + t("lvl") + " " + sp.lv
+            + (sp.solo6 ? " · " + t("solo6") : "") + "</div>" + ten + "</div>"
+            + "<span class=pc>" + sp.pct + "%</span></div>";
+        });
+      });
+    }
+    h += "</div>";
+    el.innerHTML = h;
+    el.classList.add("aperto");
+    el.querySelector("[data-chiudi]").onclick = chiudiPannello;
+    Array.prototype.forEach.call(el.querySelectorAll(".zmon"), function (d) {
+      d.onclick = function () { mostraSpecie(d.getAttribute("data-sp")); };
+    });
+  }
+
+  // Dopo un clic sulla mappa la scheda deve VEDERSI: senza questo restava
+  // sotto la piega del fianco e sembrava che il clic non avesse fatto niente.
+  function mostraDettagli() {
+    var sez = $("dett-sez"), sc = $("scroll");
+    if (!sez || !sc) return;
+    var y = sez.offsetTop - sc.offsetTop - 6;
+    if (sc.scrollTo) sc.scrollTo({ top: y, behavior: "smooth" });
+    else sc.scrollTop = y;
+  }
+
+  function mostraPersonaggio(pe, key) {
+    var ge = dati.oe[pe.gfx];
+    var h = bottoneTorna(key);
+    h += "<div class='cartellino'>";
+    if (ge && ge.img.giu)
+      h += "<img class=oe src='mappa/" + ge.img.giu + "' style='width:" + (ge.w * 2) + "px;height:" + (ge.h * 2) + "px'>";
+    h += "<div class=chi>";
+    if (pe.tipo === "allenatore" && pe.cc)
+      h += "<div class=cl>" + G("classi", pe.cc, pe.nome.split(" ")[0]) + "</div>"
+        + "<div class=nm>" + (G("trainers", pe.tc, pe.nome.split(" ").slice(1).join(" ")) || pe.nome) + "</div>";
+    else
+      h += "<div class=nm>" + nomePersonaggio(pe) + "</div>";
+    h += "<div class=muto>" + nomeMappaK(key) + " (" + pe.x + "," + pe.y + ")</div>";
+    h += "</div></div>";
+    if (pe.squadra && pe.squadra.length) {
+      h += "<h4>" + t("squadra") + " (" + pe.squadra.length + ")"
+        + (pe.doppia ? " · " + t("doppia") : "") + "</h4><div class='squadra'>";
+      pe.squadra.forEach(function (s) { h += monBox(s); });
+      h += "</div>";
+      // LE RIVINCITE, chiuse di base (gRematchTable, src/battle_setup.c).
+      // Sono le squadre che l'allenatore tira fuori quando ti richiama col
+      // PokeNav: piu' forti, e diverse dalla prima. Vanno sotto la squadra
+      // base e non al posto suo, perche' quella e' l'unica che incontri
+      // camminando; <details> senza `open` = tendina chiusa, e il CSS
+      // `details.sez` c'e' gia' (lo usa la legenda).
+      if (pe.rematch && pe.rematch.length) {
+        h += "<details class='sez' style='margin-top:10px'><summary>"
+          + t("rivincite", pe.rematch.length) + "</summary>";
+        h += "<div class=muto style='margin:6px 0 2px'>" + t("rivinciteNota") + "</div>";
+        pe.rematch.forEach(function (r, i) {
+          h += "<h4>" + t("rivincita", i + 1)
+            + (r.soldi ? " · " + r.soldi + " ¥" : "") + "</h4><div class='squadra'>";
+          r.squadra.forEach(function (s) { h += monBox(s); });
+          h += "</div>";
+        });
+        h += "</details>";
+      }
+    }
+    // IL PREMIO IN DENARO: 4 x livello dell'ultimo della squadra x
+    // moltiplicatore della classe (gTrainerMoneyTable), x2 in doppia -
+    // calcolato da gen_mappa.py con la formula di GetTrainerMoneyToGive.
+    if (pe.tipo === "allenatore" && pe.soldi)
+      h += "<h4>" + t("premio") + "</h4><div><b>" + pe.soldi + " ¥</b></div>";
+    if (pe.doni && pe.doni.length)
+      h += "<h4>" + (pe.tipo === "allenatore" ? t("ricompensa") : t("dono")) + "</h4><div>"
+        + doniConIcona(pe, 24) + "</div>";
+    if (pe.c && dati.item[pe.c])
+      h += "<h4>" + t("strumenti") + "</h4><img class=itm src='mappa/" + dati.item[pe.c] + "'> " + G("items", pe.c, pe.nome);
+    h += "<div style='margin-top:10px'><span class='torna-su' data-vai2='1'>" + t("vaiQui") + "</span></div>";
+    $("dett").innerHTML = h;
+    collegaTorna();
+    var b = $("dett").querySelector("[data-vai2]");
+    if (b) b.onclick = function () { vaiA(key, pe.x, pe.y); };
+    mostraDettagli();
+  }
+
+  function mostraStrumento(it, key) {
+    var h = bottoneTorna(key);
+    h += "<div class='cartellino'>";
+    if (it.c && dati.item[it.c]) h += "<img class=itm style='width:36px;height:36px' src='mappa/" + dati.item[it.c] + "'>";
+    h += "<div class=chi><div class=nm>" + nomeItem(it) + "</div><div class=cl>"
+      + (it.nascosto ? t("nascosto") : it.dono ? t("dono") : t("aTerra")) + "</div>"
+      + "<div class=muto>" + nomeMappaK(key) + " (" + it.x + "," + it.y + ")</div>"
+      + (it.punti ? "<div class=muto>" + t("piuPunti", it.punti) + "</div>" : "")
+      + "</div></div>";
+    h += "<div style='margin-top:10px'><span class='torna-su' data-vai2='1'>" + t("vaiQui") + "</span></div>";
+    $("dett").innerHTML = h;
+    collegaTorna();
+    var b = $("dett").querySelector("[data-vai2]");
+    if (b) b.onclick = function () { vaiA(key, it.x, it.y); };
+    mostraDettagli();
+  }
+
+  function mostraSpecie(nome) {
+    var s = dati.specie[nome];
+    evidenziate = {};
+    var h = "<h3>" + monAnimato(s.cost, 64) + nomeSpecie(nome, s.cost) + "</h3>";
+    h += "<table><tr><th>" + t("dove") + "</th><th>" + t("come") + "</th><th>%</th><th>" + t("lv") + "</th></tr>";
+    s.dove.forEach(function (d) {
+      evidenziate[d.mappa] = true;
+      h += "<tr data-k='" + d.mappa + "'><td>" + nomeMappaK(d.mappa) + "</td><td>" + d.metodo + "</td><td class=n>" + d.pct + "%</td><td class=n>" + d.lv + "</td></tr>";
+    });
+    h += "</table><div class=muto style='margin-top:7px'>" + t("evidenziate") + "</div>";
+    $("dett").innerHTML = h;
+    Array.prototype.forEach.call($("dett").querySelectorAll("tr[data-k]"), function (tr) {
+      tr.onclick = function () { var k = tr.getAttribute("data-k"); selezionata = k; centraSu(k, undefined, undefined, Math.max(z, 1)); mostraMappa(k); aggiornaNav(); };
+    });
+    mostraDettagli();
+    dirty = true;
+  }
+
+  // ---------------------------------------------------------------- Safari
+  //
+  // Tutto quello che c'e' qui dentro e' stato letto nel sorgente del gioco.
+  // Le due cose che quasi tutte le guide sbagliano, e che il codice smentisce:
+  //   - in Smeraldo NON esistono l'Esca e il Sasso/Fango: il menu ha
+  //     Pokemella e "Avvicinati" (src/battle_controller_safari.c:176-189);
+  //   - la pokemella nel cestino NON cambia le specie ne' il tasso d'incontro,
+  //     cambia SOLO la natura del selvatico (src/wild_encounter.c:335-361).
+  function guidaSafari() {
+    var IT = (lang === "it"), h = "";
+    function R(rif) { return " <span class=rif>" + rif + "</span>"; }
+    function P(cls, it, en) { return "<p" + (cls ? " class=" + cls : "") + ">" + (IT ? it : en) + "</p>"; }
+    function H5(it, en) { return "<h5>" + (IT ? it : en) + "</h5>"; }
+
+    h += "<h4>" + (IT ? "Come funziona la Zona Safari" : "How the Safari Zone works") + "</h4>";
+    h += "<div class=safari>";
+
+    h += P("sf1",
+      "<b>Ingresso 500 \u00a5</b>, ti danno <b>30 Safari Ball</b> e hai <b>500 passi</b> (contano anche in bicicletta). Senza il <b>Portapok\u00e9melle</b> non ti fanno nemmeno entrare." + R("safari_zone.c:55-64"),
+      "<b>500 \u00a5 entry</b>, <b>30 Safari Balls</b>, <b>500 steps</b> (the bike counts too). Without the <b>Pok\u00e9block Case</b> they won't let you in." + R("safari_zone.c:55-64"));
+
+    h += P("sfw",
+      "In Smeraldo <b>non ci sono n\u00e9 l'Esca n\u00e9 il Sasso</b>: il menu \u00e8 Safari Ball, <b>Pokemella</b>, <b>Avvicinati</b>, Fuggi." + R("battle_controller_safari.c:176"),
+      "Emerald has <b>no Bait and no Rock</b>: the menu is Safari Ball, <b>Pok\u00e9block</b>, <b>Go Near</b>, Run." + R("battle_controller_safari.c:176"));
+
+    h += H5("I due numeri nascosti", "The two hidden numbers");
+    h += P("",
+      "Ogni incontro parte con <b>fuga 3</b> e <b>cattura = tasso della specie \u00d7 100 / 1275</b> (255 \u2192 20, il massimo). La probabilit\u00e0 che scappi a ogni turno \u00e8 <b>fuga \u00d7 5%</b>: quindi <b>15%</b> all'inizio." + R("battle_main.c:3113"),
+      "Each encounter starts at <b>escape 3</b> and <b>catch = species rate \u00d7 100 / 1275</b> (255 \u2192 20, the cap). Flee chance per turn is <b>escape \u00d7 5%</b>: <b>15%</b> at first." + R("battle_main.c:3113"));
+
+    h += H5("Avvicinati: alza la cattura, ma la fuga molto di pi\u00f9", "Go Near: raises catch, raises flee much more");
+    h += "<table class=sft><tr><th>" + (IT ? "usi" : "uses") + "</th><th>" + (IT ? "cattura" : "catch") + "</th><th>" + (IT ? "fuga" : "flee") + "</th></tr>"
+       + "<tr><td>0</td><td>C</td><td>15%</td></tr><tr><td>1</td><td>C+4</td><td>35%</td></tr>"
+       + "<tr><td>2</td><td>C+7</td><td>55%</td></tr><tr><td>3</td><td>C+9</td><td>75%</td></tr>"
+       + "<tr><td>4</td><td>C+10</td><td>95%</td></tr><tr><td>5+</td><td>C+11</td><td><b>100%</b></td></tr></table>";
+    h += P("muto",
+      "Dal quinto uso scappa <b>sempre</b>. Il messaggio \u00abnon puoi avvicinarti di pi\u00f9\u00bb arriva al quarto, ma l'effetto continua ad applicarsi." + R("battle_util.c:75, 590-615"),
+      "From the fifth use it <b>always</b> flees. The \u201ccan't get closer\u201d message shows at the fourth, but the effect keeps applying." + R("battle_util.c:75, 590-615"));
+
+    h += H5("Pokemella: abbassa solo la fuga, e dipende dalla natura", "Pok\u00e9block: only lowers flee, and depends on nature");
+    h += "<table class=sft><tr><th>" + (IT ? "reazione" : "reaction") + "</th><th>1\u00b0</th><th>2\u00b0</th><th>3\u00b0+</th></tr>"
+       + "<tr><td>" + (IT ? "<b>\u00e8 rapito</b> (sapore gradito)" : "<b>enthralled</b> (liked)") + "</td><td>\u22125</td><td>\u22123</td><td>\u22122</td></tr>"
+       + "<tr><td>" + (IT ? "\u00e8 incuriosito (neutro)" : "curious (neutral)") + "</td><td>\u22123</td><td>\u22122</td><td>\u22121</td></tr>"
+       + "<tr><td>" + (IT ? "la ignora (sgradito)" : "ignores it (disliked)") + "</td><td>0</td><td>0</td><td>0</td></tr></table>";
+    h += P("muto",
+      "La pokemella <b>non tocca mai</b> la probabilit\u00e0 di cattura: serve solo a non farlo scappare. Le cinque nature neutre reagiscono sempre \u00abincuriosite\u00bb." + R("battle_util.c:52-74, pokeblock.c:136-165"),
+      "A block <b>never</b> touches catch odds: it only stops the flee. The five neutral natures always react \u201ccurious\u201d." + R("battle_util.c:52-74, pokeblock.c:136-165"));
+
+    h += P("sfb",
+      "<b>Il trucco che il gioco non dice.</b> C'\u00e8 un difetto vero nel codice: se la fuga scende <i>esattamente</i> al valore sottratto arriva a <b>0</b>, e da quel momento il Pok\u00e9mon <b>non scappa pi\u00f9</b>. Partendo da fuga 3 basta <b>una</b> pokemella che lo lasci \u00abincuriosito\u00bb (\u22123): poi puoi lanciare Safari Ball finch\u00e9 vuoi." + R("battle_util.c:575-580"),
+      "<b>The trick the game won't tell you.</b> A real bug: if flee drops to <i>exactly</i> the subtracted value it becomes <b>0</b> and the Pok\u00e9mon <b>never flees</b>. From escape 3, one \u201ccurious\u201d block (\u22123) is enough." + R("battle_util.c:575-580"));
+
+    h += H5("I cestini delle pokemelle", "The Pok\u00e9block feeders");
+    h += P("",
+      "Una pokemella in un cestino dura <b>100 passi</b>. Se stai entro <b>5 caselle</b> (contate a L, non in linea d'aria) c'\u00e8 l'<b>80%</b> che il prossimo selvatico abbia una <b>natura che gradisce quel sapore</b>. <b>Non cambia n\u00e9 le specie n\u00e9 quanto spesso appaiono</b> \u2014 ma resta utilissimo, perch\u00e9 quel Pok\u00e9mon reagir\u00e0 poi \u00abrapito\u00bb alle pokemelle dello stesso sapore. Al massimo <b>10 cestini</b> insieme." + R("safari_zone.c:203-240, wild_encounter.c:335-361"),
+      "A block in a feeder lasts <b>100 steps</b>. Within <b>5 tiles</b> (Manhattan) there's an <b>80%</b> chance the next wild Pok\u00e9mon has a <b>nature that likes that flavor</b>. It does <b>not</b> change species or encounter rate. Max <b>10</b> feeders." + R("safari_zone.c:203-240, wild_encounter.c:335-361"));
+
+    h += H5("Le aree chiuse", "The closed areas");
+    h += P("",
+      "L'area a <b>est</b> (Sud-est e Nord-est, quella con i Pok\u00e9mon di Johto) \u00e8 sbarrata da due operai finch\u00e9 non entri nella <b>Sala d'Onore</b>. Le aree a <b>ovest</b> non hanno nessun blocco nel codice: serve solo la <b>bicicletta</b>." + R("hall_of_fame.inc:16"),
+      "The <b>east</b> area (Johto Pok\u00e9mon) is blocked by two workers until the <b>Hall of Fame</b>. The <b>west</b> areas have no gate at all: you just need the <b>bike</b>." + R("hall_of_fame.inc:16"));
+
+    h += H5("Le pokemelle: come si fanno, a cosa servono", "Pok\u00e9blocks: making them, using them");
+    h += P("",
+      "Il Mixer Bacche concentra i sapori sottraendoli a catena, poi toglie a ognuno il numero di sapori finiti sotto zero: per questo <b>mescolare bacche di sapori diversi rovina la pokemella</b>. Ogni sapore alza una statistica di gara: <b>piccante\u2192Fascino, asciutto\u2192Bellezza, dolce\u2192Grazia, amaro\u2192Acume, aspro\u2192Forza</b>, con \u00b110% dalla natura." + R("berry_blender.c:2387-2492, use_pokeblock.c:1080"),
+      "The Blender concentrates flavors by chained subtraction, then subtracts from each the count of flavors that went negative: mixing different flavors <b>ruins</b> the block. Each flavor raises one contest stat: <b>spicy\u2192Cool, dry\u2192Beauty, sweet\u2192Cute, bitter\u2192Smart, sour\u2192Tough</b>, \u00b110% from nature." + R("berry_blender.c:2387-2492, use_pokeblock.c:1080"));
+    h += P("sfb",
+      "<b>Il limite che conta davvero:</b> ogni Pok\u00e9mon ha un budget di <b>lucentezza 255</b>, e ogni pokemella ne consuma quanto il suo <b>Livello sens.</b>. Arrivato a 255 <b>non accetta pi\u00f9 niente, per sempre</b>. Servono quindi pokemelle con <b>sapore alto e Livello sens. basso</b> \u2014 e il Livello sens. cala <b>frullando in pi\u00f9 giocatori</b>." + R("use_pokeblock.c:1002-1022, berry_blender.c:2459"),
+      "<b>The limit that really matters:</b> each Pok\u00e9mon has a <b>255 sheen</b> budget and each block spends its <b>feel</b>. At 255 it <b>accepts nothing more, ever</b>. So: <b>high flavor, low feel</b> \u2014 and feel drops when <b>more people blend together</b>." + R("use_pokeblock.c:1002-1022, berry_blender.c:2459"));
+
+    h += "</div>";
+    return h;
+  }
+
+  // ------------------------------------------------ il calcolatore di Feebas
+  //
+  // L'algoritmo e' quello VERO del gioco (src/wild_encounter.c:113-179):
+  //   seme = gSaveBlock1Ptr->dewfordTrends[0].rand  (u16, SaveBlock1+0x2E66)
+  //   per 6 volte: s = s*1103515245+12345 (u32); v = (s>>16) % 447;
+  //                se v==0 -> 447; se v<4 si ritira (i primi 3 spot sono
+  //                irraggiungibili in cima alla mappa)
+  // Gli spot validi sono 4..447 e i candidati in dati.json sono GIA'
+  // nell'ordine del gioco (riga per riga, saltando i primi 3): il tile dello
+  // spot N e' feebas[N-4]. Controprova nel sorgente: il primo spot valido e'
+  // il 4 a (18,18), che e' esattamente feebas[0].
+  function feebasSpotDaSeme(seme) {
+    var s = seme >>> 0, out = [], estratte = 0;
+    while (estratte < 6) {
+      s = (Math.imul(s, 1103515245) + 12345) >>> 0;
+      var v = (s >>> 16) % 447;
+      if (v === 0) v = 447;
+      if (v < 4) continue;      // come il gioco: i primi 3 spot si ritirano
+      out.push(v); estratte++;  // i doppioni CONTANO (il gioco li tiene)
+    }
+    // tolti solo per il disegno: un doppione e' lo stesso tile due volte
+    return out.filter(function (v, i) { return out.indexOf(v) === i; });
+  }
+
+  // Il seme dal .sav: si rimontano i settori come fa tools/analizza_save.py
+  // (14 settori da 4096 byte per fessura, footer a +4084: id, checksum,
+  // firma 0x08012025, contatore). SaveBlock1 sta nei settori id 1..4;
+  // dewfordTrends[0] sta a SaveBlock1+0x2E68 (vedi sotto: il commento
+  // della decomp e' sfasato di 4 byte, e qui si controlla che i gruppi delle
+  // due parole siano quelli giusti prima di fidarsi del numero).
+  function feebasSemeDaSav(buf) {
+    var u8 = new Uint8Array(buf);
+    if (u8.length < 57344) return null;
+    var dv = new DataView(buf);
+    function leggiFessura(base) {
+      var settori = {}, contatore = 0, ok = false;
+      for (var i = 0; i < 14; i++) {
+        var off = base + i * 4096;
+        if (off + 4096 > u8.length) return null;
+        var firma = dv.getUint32(off + 4084 + 4, true);
+        if (firma !== 0x08012025) continue;
+        var id = dv.getUint16(off + 4084, true);
+        settori[id] = off;
+        contatore = Math.max(contatore, dv.getUint32(off + 4084 + 8, true));
+        ok = true;
+      }
+      return ok ? { settori: settori, contatore: contatore } : null;
+    }
+    var a = leggiFessura(0), b = u8.length >= 114688 ? leggiFessura(57344) : null;
+    var f = (a && b) ? (a.contatore >= b.contatore ? a : b) : (a || b);
+    if (!f) return null;
+    // SaveBlock1+0x2E66: 0x2E66 = 2*3968 + 3942 -> settore id 3, offset 3942
+    // L'INDIRIZZO GIUSTO E' 0x2E68, NON quello del commento della decomp.
+    // global.h scrive /*0x2e64*/ davanti a dewfordTrends, ma quel commento e'
+    // sfasato di 4 byte: con 0x2E64 le due parole della frase cadono nei
+    // gruppi 54 e 113, che NON ESISTONO (i gruppi sono ~24). Con 0x2E68
+    // cadono in CONDITIONS (10) e LIFESTYLE (12), che sono esattamente quelli
+    // che InitDewfordTrend sorteggia - e 0x2E68 + 5 voci x 8 byte = 0x2E90,
+    // cioe' l'inizio di contestWinners. Verificato sul salvataggio di Lain.
+    var TRENDS = 0x2E68, RAND = TRENDS + 2;
+    var pezzo = Math.floor(RAND / 3968), resto = RAND % 3968;
+    var so = f.settori[1 + pezzo];
+    if (so === undefined) return null;
+    // CONTROLLO, non fiducia: le due parole della frase devono stare nei
+    // gruppi che il gioco usa (CONDITIONS 10, poi LIFESTYLE 12 o HOBBIES 13).
+    // Se non e' cosi', quello che stiamo leggendo non e' una frase di
+    // tendenza e il numero non va usato.
+    var pezzoW = Math.floor((TRENDS + 4) / 3968), restoW = (TRENDS + 4) % 3968;
+    var soW = f.settori[1 + pezzoW];
+    if (soW === undefined) return null;
+    var w0 = dv.getUint16(soW + restoW, true);
+    var w1 = dv.getUint16(soW + restoW + 2, true);
+    var g0 = w0 >> 9, g1 = w1 >> 9;
+    if (g0 !== 10 || (g1 !== 12 && g1 !== 13)) return null;
+    return dv.getUint16(so + resto, true);
+  }
+
+  // I SEMI COMPATIBILI con i tile dove Feebas e' GIA' uscito.
+  //
+  // Serve a chi gioca su GBA vero e non ha il salvataggio sottomano: il seme
+  // non si legge, ma si DEDUCE. Sono solo 65536 semi e sei estrazioni
+  // ciascuno: si provano tutti in un lampo. Misurato (Percorso 119): 1 tile
+  // noto -> 883 semi, 2 -> 6, 3 -> UNO SOLO, ed e' quello giusto (provato
+  // contro il salvataggio di Lain, seme 57936).
+  // I SEI SPOT CHE NON SI POSSONO PESCARE. Il gioco li sorteggia lo stesso,
+  // ma da riva non ci si arriva: se uno dei tuoi sei cade qui, quel posto e'
+  // perso e i tile utili diventano cinque. La lista viene dal calcolatore di
+  // mucksw (Feebas-Tile-Calculator), unico punto in cui questa pagina si
+  // appoggia a un lavoro altrui invece che alla decomp o alla cartuccia.
+  var FEEBAS_IRRAGGIUNGIBILI = [105, 119, 144, 296, 297, 298];
+
+  // IL METODO DELLA FRASE DI TENDENZA (algoritmo di mucksw, riletto nel loro
+  // sorgente e riprovato qui). Non ricostruisce la partita: parte da un
+  // ancoraggio (per Smeraldo il numero dell'ID Allenatore), salta i primi 700
+  // giri e poi CERCA nel flusso il punto in cui il generatore produce proprio
+  // le due parole della tua frase; il valore 6, 7 o 8 giri dopo e' il seme di
+  // Feebas. Escono piu' candidati perche' il numero di giri dipende da quanto
+  // e' durata la schermata in cui la frase e' stata creata.
+  //
+  // PROVATO sul salvataggio di Lain: frase (SEI AL TOP, NOTIZIE) e ID 8508
+  // danno cinque candidati e il secondo, 57936, e' esattamente il seme che si
+  // legge nel salvataggio.
+  function feebasAvanza(s, n) {
+    for (var i = 0; i < n; i++) s = (Math.imul(s, 1103515245) + 24691) >>> 0;
+    return s;
+  }
+  function feebasSemiDaFrase(idxCond, gruppoLifestyle, idxSecondo, tid, quanti) {
+    var s = feebasAvanza(tid >>> 0, 700);
+    var el = gruppoLifestyle ? 45 : 54;
+    var out = [], giri = 0;
+    while (out.length < (quanti || 5) && giri < 4000000) {
+      s = feebasAvanza(s, 1); giri++;
+      if ((s >>> 16) % 69 !== idxCond) continue;
+      if (((feebasAvanza(s, 1) >>> 16) & 1) !== gruppoLifestyle) continue;
+      if ((feebasAvanza(s, 2) >>> 16) % el !== idxSecondo) continue;
+      var n;
+      if ((feebasAvanza(s, 4) >>> 16) % 98 > 50) n = ((feebasAvanza(s, 5) >>> 16) % 98 > 80) ? 8 : 7;
+      else n = 6;
+      out.push(feebasAvanza(s, n) >>> 16);
+    }
+    return out;
+  }
+
+  function feebasSemiDaTile(key, noti) {
+    var m = dati.mappe[key];
+    if (!m || !m.feebas || !noti.length) return [];
+    var idx = {};                       // "x,y" -> numero dello spot (indice+4)
+    for (var i = 0; i < m.feebas.length; i++) idx[m.feebas[i][0] + "," + m.feebas[i][1]] = i + 4;
+    var cerco = [];
+    for (var j = 0; j < noti.length; j++) {
+      var s = idx[noti[j][0] + "," + noti[j][1]];
+      if (s === undefined) return null;  // tile che non e' nemmeno candidato
+      cerco.push(s);
+    }
+    var out = [];
+    for (var seme = 0; seme < 65536; seme++) {
+      var spot = feebasSpotDaSeme(seme), ok = true;
+      for (var q = 0; q < cerco.length; q++) {
+        if (spot.indexOf(cerco[q]) < 0) { ok = false; break; }
+      }
+      if (ok) out.push(seme);
+    }
+    return out;
+  }
+
+  function applicaFeebasSeme(key, seme) {
+    var m = dati.mappe[key];
+    if (!m || !m.feebas || !m.feebas.length) return [];
+    feebasSeme = seme & 0xFFFF;
+    var spot = feebasSpotDaSeme(feebasSeme);
+    // via gli spot irraggiungibili: mandare qualcuno a pescare dove non si
+    // puo' arrivare e' peggio che non dirglielo
+    feebas6[key] = spot.filter(function (n) { return FEEBAS_IRRAGGIUNGIBILI.indexOf(n) < 0; })
+                       .map(function (n) { return m.feebas[n - 4]; })
+                       .filter(function (v) { return !!v; });
+    try { localStorage.setItem("passotile-feebas-seme", String(feebasSeme)); } catch (e) {}
+    dirty = true;
+    return feebas6[key];
+  }
+
+  function mostraMappa(key) {
+    var m = dati.mappe[key];
+    if (!m) return;
+    selezionata = key;
+    var h = "<h3>" + nomeMappa(m) + "</h3><div class=muto>" + m.id + " · " + key + " · " + m.w + "\u00D7" + m.h
+      + " " + t("tile") + " · " + nomeTipoMappa(m.tipo)
+      + (m.mondo ? " · " + t("mondo") + " " + nomeMondo(dati.mondi[m.mondo]) : " · " + t("nonConn")) + "</div>";
+    // i luoghi staccati (satelliti) lo dicono: dove sono disegnati non e' una
+    // posizione del gioco, e chi legge deve saperlo
+    if (m.satellite) h += "<div class=safari><p class=sfw>" + t("satNota")
+      + (m.sbarco ? " <b>" + String.fromCharCode(0x2693) + " " + t("sbarco") + " ("
+         + (m.sbarco[0] - m.ox) + "," + (m.sbarco[1] - m.oy) + ").</b>" : "")
+      + "</p></div>";
+    if (m.miraggio) h += "<div class=safari><p class=sfw>" + t("miraggio")
+      + " <span class=rif>wild_encounter.c / Route130_MirageIsland_Layout</span></p></div>";
+
+    var porte = m.porte || [];
+    if (porte.length) {
+      h += "<h4>" + t("porte") + " (" + porte.length + ")</h4><div>";
+      porte.forEach(function (w, i) {
+        var dest = dati.mappe[w.a];
+        h += "<span class='torna-su' data-p='" + i + "' style='margin:2px 4px 0 0'><i style='display:inline-grid;place-items:center;width:15px;height:15px;border-radius:4px;color:#fff;font-size:10px;font-weight:800;background:"
+          + (w.stessa ? PORTA_STESSA_COL : (PORTA_COL[w.tipo] || "#2f6bc0")) + "'>" + (w.stessa ? SIMBOLO_STESSA : PORTA_FRECCIA[w.tipo] || "\u2192") + "</i>"
+          + (w.stessa ? (t("stessaMappa") + " (" + w.ax + "," + w.ay + ")")
+                      : (w.dinamica ? t("dinamica") : (dest ? nomeMappa(dest) : w.nome))) + "</span>";
+      });
+      h += "</div>";
+    }
+
+    h += "<h4>" + t("strumenti") + " (" + m.strumenti.length + ")</h4>";
+    if (m.strumenti.length) {
+      h += "<table>";
+      m.strumenti.forEach(function (s, i) {
+        h += "<tr data-s='" + i + "'><td style='width:28px'>" + (s.c && dati.item[s.c] ? "<img class=itm src='mappa/" + dati.item[s.c] + "'>" : "") + "</td>"
+          + "<td>" + nomeItem(s) + (s.punti ? " <span class=muto>×" + s.punti + "</span>" : "") + "</td><td class=n>" + s.x + "," + s.y + "</td>"
+          + "<td class=muto>" + (s.nascosto ? t("nascosto") : s.dono ? t("dono") : t("aTerra")) + "</td></tr>";
+      });
+      h += "</table>";
+    } else h += "<div class=muto>" + t("nessuno") + "</div>";
+
+    var all = m.personaggi.filter(function (p) { return p.tipo === "allenatore"; });
+    var altri = m.personaggi.filter(function (p) { return p.tipo !== "allenatore"; });
+    h += "<h4>" + t("allenatori") + " (" + all.length + ")</h4>";
+    if (all.length) {
+      h += "<table>";
+      all.forEach(function (p) {
+        var ge = dati.oe[p.gfx];
+        var idx = m.personaggi.indexOf(p);
+        h += "<tr data-t='" + idx + "'><td style='width:26px'>"
+          + (ge && ge.img.giu ? "<img class=oe src='mappa/" + ge.img.giu + "' style='width:16px;height:22px'>" : "")
+          + "</td><td>" + nomeAllenatore(p)
+          + (p.soldi ? "<div class=muto>" + p.soldi + " ¥" + (p.doppia ? " · " + t("doppia") : "") + "</div>" : "")
+          + (p.doni && p.doni.length ? "<div class=muto>" + t("ricompensa") + ": </div><div>" + doniConIcona(p, 18) + "</div>" : "")
+          + "</td><td>"
+          + (p.squadra || []).map(function (s) {
+              var ic = dati.icone && dati.icone[s.cost];
+              return (ic ? "<img class=ic style='width:22px;height:22px' src='mappa/" + ic + "' title='" + nomeSpecie(s.specie, s.cost) + "'>" : "")
+                + nomeSpecie(s.specie, s.cost) + " " + t("lvl") + s.lv;
+            }).join(", ")
+          + "</td></tr>";
+      });
+      h += "</table>";
+    } else h += "<div class=muto>" + t("nessuno") + "</div>";
+
+    if (altri.length) {
+      h += "<h4>" + t("personaggi") + " (" + altri.length + ")</h4>";
+      var conta = {};
+      altri.forEach(function (p) { var k = nomePersonaggio(p) + (p.doni ? " (" + t("dono") + ": " + nomiDoni(p).join(", ") + ")" : ""); conta[k] = (conta[k] || 0) + 1; });
+      h += "<div class=muto>" + Object.keys(conta).sort().map(function (k) { return k + (conta[k] > 1 ? " \u00D7" + conta[k] : ""); }).join(" · ") + "</div>";
+    }
+
+    var metodi = Object.keys(m.selvatici);
+    // LA GUIDA DELLA ZONA SAFARI. Compare solo sulle mappe della Safari,
+    // ed e' scritta LEGGENDO il codice del gioco (src/safari_zone.c,
+    // src/battle_util.c, src/pokeblock.c, src/wild_encounter.c), non da
+    // internet: i numeri sono quelli veri, col file da cui vengono.
+    // Le 7 mappe della Safari (mapsec MAPSEC_SAFARI_ZONE) piu' l'ingresso su
+    // Percorso 121, che ha il mapsec della route ma l'id giusto.
+    if (/SAFARI_ZONE/.test(m.id || "")) h += guidaSafari();
+
+    // Feebas: la spiegazione sta accanto ai selvatici perche' e' li' che uno
+    // la cerca, e serve a non far credere che i 444 tile siano tutti buoni.
+    if (m.feebas && m.feebas.length) {
+      h += "<h4>Feebas</h4><div class=safari><p class=sfw>" + (lang === "it"
+        ? "In tutto il gioco Feebas si pesca <b>solo qui</b>, e solo su <b>6 tile</b> alla volta - "
+          + "sorteggiati fra i <b>" + m.feebas.length + "</b> segnati in azzurro. Quali siano i sei "
+          + "<b>dipende dal tuo salvataggio</b>: il gioco li estrae con un generatore semato dalla "
+          + "<b>frase di tendenza di Bluruvia</b>, quindi <b>cambiano quando cambia la frase</b> "
+          + "(e dopo un mescolarecord). Fuori da questi tile non esce mai."
+        : "Feebas is fished <b>only here</b>, on just <b>6 tiles</b> at a time, drawn from the <b>"
+          + m.feebas.length + "</b> marked in blue. Which six <b>depends on your save</b>: the game "
+          + "seeds the draw from the <b>Dewford trend phrase</b>, so they change when it changes.")
+        + " <span class=rif>wild_encounter.c:113-179</span></p>";
+      h += "<p>" + (lang === "it"
+        ? "Va bene <b>qualunque canna</b> (il controllo di Feebas viene prima di quello della canna), "
+          + "il livello e' <b>20-25</b>, e anche sul tile giusto la probabilita' e' <b>50%</b>: "
+          + "se non esce, riprova sullo stesso tile prima di spostarti."
+        : "<b>Any rod</b> works (the Feebas check comes before the rod check), level is <b>20-25</b>, "
+          + "and even on the right tile it's a <b>50%</b> chance: retry the same tile before moving.")
+        + " <span class=rif>wild_encounter.c:136,780</span></p>";
+      // IL CALCOLATORE: dal .sav (esatto, letto in locale) o dal seme a mano.
+      h += "<h5>" + t("calcTitolo") + "</h5>";
+      h += "<p>" + t("calcSpiega") + "</p>";
+      h += "<p><label class='torna-su' style='display:inline-block'>" + t("calcBottone")
+        + "<input type='file' id='feebas-sav' accept='.sav,.sa1,.sa2,.srm,.fla' style='display:none'></label> "
+        + "<span style='white-space:nowrap'>" + t("calcSeme")
+        + " <input type='number' id='feebas-seme' min='0' max='65535' style='width:80px'"
+        + (feebasSeme !== null ? " value='" + feebasSeme + "'" : "") + ">"
+        + " <button id='feebas-vai' class='torna-su' style='border:0;cursor:pointer'>OK</button></span></p>";
+      h += "<p id='feebas-esito' class=sfb style='display:" + (feebas6[key] ? "block" : "none") + "'>"
+        + (feebas6[key] ? t("calcFatto", feebasSeme) + "<br>"
+           + feebas6[key].map(function (c) { return "(" + c[0] + "," + c[1] + ")"; }).join(" · ") : "") + "</p>";
+      h += "<p class=muto style='font-size:11.5px'>" + t("calcNota") + "</p>";
+      // --- TERZO METODO: dai tile dove Feebas e' GIA' uscito ---------------
+      h += "<h5>" + t("calcDaTile") + "</h5>";
+      h += "<p>" + t("calcDaTileSpiega") + "</p>";
+      h += "<p><input type='text' id='feebas-tile' placeholder='x,y' style='width:86px'> "
+        + "<button id='feebas-add' class='torna-su' style='border:0;cursor:pointer'>" + t("calcAggiungi") + "</button> "
+        + "<button id='feebas-clr' class='torna-su' style='border:0;cursor:pointer'>" + t("calcSvuota") + "</button></p>";
+      h += "<p id='feebas-noti' class=muto style='font-size:12px'></p>";
+      h += "<p id='feebas-esito2' style='display:none'></p>";
+      // --- QUARTO METODO: dalla frase di tendenza (mucksw) -----------------
+      var fr = (dati.it && dati.it.frasi) || null;
+      if (fr) {
+        h += "<h5>" + t("calcFrase") + "</h5>";
+        h += "<p>" + t("calcFraseSpiega") + "</p>";
+        var opz = function (lista) {
+          return lista.map(function (w, i) { return "<option value='" + i + "'>" + w + "</option>"; }).join("");
+        };
+        h += "<p>" + t("calcParola1") + ": <select id='feebas-w1'>" + opz(fr.conditions) + "</select> "
+          + t("calcParola2") + ": <select id='feebas-w2'>"
+          + "<optgroup label='LIFESTYLE'>" + fr.lifestyle.map(function (w, i) { return "<option value='L" + i + "'>" + w + "</option>"; }).join("") + "</optgroup>"
+          + "<optgroup label='HOBBIES'>" + fr.hobbies.map(function (w, i) { return "<option value='H" + i + "'>" + w + "</option>"; }).join("") + "</optgroup>"
+          + "</select></p>";
+        h += "<p>" + t("calcTid") + ": <input type='number' id='feebas-tid' min='0' max='65535' style='width:86px'> "
+          + "<button id='feebas-frase' class='torna-su' style='border:0;cursor:pointer'>" + t("calcCerca") + "</button></p>";
+        h += "<p id='feebas-esito3' style='display:none'></p>";
+        h += "<p class=muto style='font-size:11.5px'>" + t("calcFraseAvviso") + "</p>";
+      }
+      h += "</div>";
+    }
+
+    h += "<h4>" + t("selvatici") + (metodi.length ? "" : " (" + t("nessuno") + ")") + "</h4>";
+    metodi.forEach(function (met) {
+      var v = m.selvatici[met];
+      h += "<div style='margin-top:6px;font-size:13px'><b>" + met + "</b> <span class=muto>" + t("tasso") + " " + v.tasso + "</span></div><table>";
+      v.specie.forEach(function (s) {
+        var sp = dati.specie[s.specie];
+        h += "<tr><td style='width:34px'>" + (sp && sp.icona ? "<img class=ic src='mappa/" + sp.icona + "'>" : "") + "</td><td>"
+          + nomeSpecie(s.specie, s.cost || (sp && sp.cost))
+          // lo strumento tenuto, sotto il nome (vedi il pannello della zona)
+          + (s.tenuti && s.tenuti.length
+             ? "<div class=ten>" + s.tenuti.map(function (it) {
+                 var ic = iconaItem(it);
+                 return "<span class=t1 title='" + t("tieneT") + "'>"
+                      + (ic ? "<img class=px src='" + ic.src + "' alt=''>" : "")
+                      + nomeItem(it) + " <b>" + it.pct + "%</b></span>";
+               }).join("") + "</div>"
+             : "")
+          + (s.solo6 ? "<div class=muto style='font-size:11px'>" + t("solo6") + "</div>" : "")
+          + "</td><td class=n>" + s.pct + "%</td><td class=n>" + s.lv + "</td></tr>";
+      });
+      h += "</table>";
+    });
+
+    $("dett").innerHTML = h;
+    Array.prototype.forEach.call($("dett").querySelectorAll("[data-p]"), function (el) {
+      el.onclick = function () { attraversa(porte[+el.getAttribute("data-p")]); };
+    });
+    Array.prototype.forEach.call($("dett").querySelectorAll("tr[data-t]"), function (tr) {
+      tr.onclick = function () { mostraPersonaggio(m.personaggi[+tr.getAttribute("data-t")], key); };
+    });
+    Array.prototype.forEach.call($("dett").querySelectorAll("tr[data-s]"), function (tr) {
+      tr.onclick = function () { mostraStrumento(m.strumenti[+tr.getAttribute("data-s")], key); };
+    });
+    // il calcolatore di Feebas (solo dove c'e' il riquadro)
+    var fsav = $("dett").querySelector("#feebas-sav");
+    if (fsav) {
+      var fesito = $("dett").querySelector("#feebas-esito");
+      function feebasFatto(seme) {
+        var sei = applicaFeebasSeme(key, seme);
+        fesito.style.display = "block";
+        fesito.className = sei.length ? "sfb" : "sfw";
+        fesito.innerHTML = sei.length
+          ? t("calcFatto", seme) + "<br>" + sei.map(function (c) { return "(" + c[0] + "," + c[1] + ")"; }).join(" · ")
+          : t("calcErrore");
+      }
+      fsav.onchange = function () {
+        var f = fsav.files && fsav.files[0];
+        if (!f) return;
+        var fr = new FileReader();
+        fr.onload = function () {
+          var seme = feebasSemeDaSav(fr.result);
+          if (seme === null) { fesito.style.display = "block"; fesito.className = "sfw"; fesito.textContent = t("calcErrore"); return; }
+          var si = $("dett").querySelector("#feebas-seme");
+          if (si) si.value = seme;
+          feebasFatto(seme);
+        };
+        fr.readAsArrayBuffer(f);
+      };
+      var fvai = $("dett").querySelector("#feebas-vai");
+      if (fvai) fvai.onclick = function () {
+        var v = parseInt($("dett").querySelector("#feebas-seme").value, 10);
+        if (isNaN(v) || v < 0 || v > 65535) { fesito.style.display = "block"; fesito.className = "sfw"; fesito.textContent = t("calcErrore"); return; }
+        feebasFatto(v);
+      };
+
+      // --- terzo metodo: i tile gia' pescati ---------------------------
+      var fnoti = $("dett").querySelector("#feebas-noti");
+      var fes2 = $("dett").querySelector("#feebas-esito2");
+      function disegnaNoti() {
+        fnoti.textContent = feebasNoti.length
+          ? t("calcTileNoti") + " " + feebasNoti.map(function (c) { return "(" + c[0] + "," + c[1] + ")"; }).join(" · ")
+          : "";
+      }
+      function risolviDaTile() {
+        disegnaNoti();
+        feebas6 = {}; feebasProb = {};
+        if (!feebasNoti.length) { fes2.style.display = "none"; dirty = true; return; }
+        var semi = feebasSemiDaTile(key, feebasNoti);
+        fes2.style.display = "block";
+        if (semi === null) { fes2.className = "sfw"; fes2.textContent = t("calcTileFuori"); dirty = true; return; }
+        if (!semi.length) { fes2.className = "sfw"; fes2.textContent = t("calcSemiZero"); dirty = true; return; }
+        if (semi.length === 1) {
+          fes2.className = "sfb";
+          var sei = applicaFeebasSeme(key, semi[0]);
+          fes2.innerHTML = t("calcSemiUno", semi[0]) + "<br>"
+            + sei.map(function (c) { return "(" + c[0] + "," + c[1] + ")"; }).join(" · ");
+          dirty = true;
+          return;
+        }
+        // tanti semi: si contano i tile piu' ricorrenti, che sono quelli su
+        // cui conviene provare la canna adesso
+        var m = dati.mappe[key], conta = {};
+        for (var i = 0; i < semi.length; i++) {
+          var spot = feebasSpotDaSeme(semi[i]);
+          for (var j = 0; j < spot.length; j++) {
+            var c = m.feebas[spot[j] - 4];
+            if (c) { var kk = c[0] + "," + c[1]; conta[kk] = (conta[kk] || 0) + 1; }
+          }
+        }
+        // via i tile gia' noti: quelli li sai gia'
+        feebasNoti.forEach(function (c) { delete conta[c[0] + "," + c[1]]; });
+        var ord = Object.keys(conta).sort(function (a, b) { return conta[b] - conta[a]; }).slice(0, 14);
+        var top = {};
+        ord.forEach(function (k2) { top[k2] = conta[k2]; });
+        feebasProb[key] = top;
+        fes2.className = "sfw";
+        fes2.innerHTML = t("calcSemiTanti", semi.length) + "<br>"
+          + ord.slice(0, 8).map(function (k2) { return "(" + k2 + ")"; }).join(" · ");
+        dirty = true;
+      }
+      var fadd = $("dett").querySelector("#feebas-add");
+      if (fadd) fadd.onclick = function () {
+        var v = ($("dett").querySelector("#feebas-tile").value || "").split(/[,; ]+/);
+        var x = parseInt(v[0], 10), y = parseInt(v[1], 10);
+        if (isNaN(x) || isNaN(y)) return;
+        feebasNoti.push([x, y]);
+        $("dett").querySelector("#feebas-tile").value = "";
+        risolviDaTile();
+      };
+      var fclr = $("dett").querySelector("#feebas-clr");
+      if (fclr) fclr.onclick = function () { feebasNoti = []; feebas6 = {}; feebasProb = {}; risolviDaTile(); };
+      disegnaNoti();
+      if (feebasNoti.length) risolviDaTile();
+
+      // --- quarto metodo: la frase ------------------------------------
+      var ffrase = $("dett").querySelector("#feebas-frase");
+      if (ffrase) ffrase.onclick = function () {
+        var fes3 = $("dett").querySelector("#feebas-esito3");
+        var i1 = parseInt($("dett").querySelector("#feebas-w1").value, 10);
+        var v2 = $("dett").querySelector("#feebas-w2").value;
+        var tid = parseInt($("dett").querySelector("#feebas-tid").value, 10);
+        fes3.style.display = "block";
+        if (isNaN(tid) || tid < 0 || tid > 65535) { fes3.className = "sfw"; fes3.textContent = t("calcErrore"); return; }
+        var lifestyle = v2.charAt(0) === "L" ? 1 : 0;
+        var i2 = parseInt(v2.slice(1), 10);
+        var semi = feebasSemiDaFrase(i1, lifestyle, i2, tid, 5);
+        if (!semi.length) { fes3.className = "sfw"; fes3.textContent = t("calcFraseNiente"); return; }
+        // se l'utente ha gia' pescato da qualche parte, quei tile fanno da
+        // filtro: di solito ne resta UNO SOLO
+        if (feebasNoti.length) {
+          var compat = semi.filter(function (s) {
+            var spot = feebasSpotDaSeme(s), m2 = dati.mappe[key];
+            return feebasNoti.every(function (c) {
+              for (var i = 0; i < spot.length; i++) {
+                var tt = m2.feebas[spot[i] - 4];
+                if (tt && tt[0] === c[0] && tt[1] === c[1]) return true;
+              }
+              return false;
+            });
+          });
+          if (compat.length === 1) {
+            fes3.className = "sfb";
+            var sei = applicaFeebasSeme(key, compat[0]);
+            fes3.innerHTML = t("calcFraseUno", compat[0]) + "<br>"
+              + sei.map(function (c) { return "(" + c[0] + "," + c[1] + ")"; }).join(" · ");
+            return;
+          }
+          if (compat.length) semi = compat;
+        }
+        fes3.className = "sfw";
+        fes3.innerHTML = t("calcFraseTanti", semi.length) + " "
+          + semi.map(function (s) { return "<span class='torna-su' data-seme='" + s + "'>" + s + "</span>"; }).join(" ");
+        Array.prototype.forEach.call(fes3.querySelectorAll("[data-seme]"), function (el) {
+          el.onclick = function () {
+            var s = +el.getAttribute("data-seme");
+            var sei = applicaFeebasSeme(key, s);
+            fesito.style.display = "block"; fesito.className = "sfb";
+            fesito.innerHTML = t("calcFatto", s) + "<br>"
+              + sei.map(function (c) { return "(" + c[0] + "," + c[1] + ")"; }).join(" · ");
+          };
+        });
+      };
+    }
+    mostraDettagli();
+  }
+
+  // ------------------------------------------------- animazione dei giocatori
+  //
+  // `anim[peer]` ricorda da dove veniva e quando e' partito: il disegno
+  // interpola fra le due posizioni invece di teletrasportare, e mentre
+  // scivola alterna i fotogrammi del passo. Se il salto e' lungo (warp,
+  // cambio mappa, primo avvistamento) NON si anima: si compare e basta,
+  // perche' una scivolata di venti tile sarebbe una bugia.
+  //
+  // UN SALTO BREVE E' UNA CATENA DI PASSI, NON UNA SCIVOLATA (2026-08-26).
+  // Qui arrivano POSIZIONI, non passi: se fra due campioni il giocatore ha
+  // percorso 2 o 3 tile (succede correndo e in bici, dove i passi durano
+  // ~133 e ~67 ms contro i 260 di un campione), la versione di prima li
+  // copriva in UN'unica scivolata da 260 ms - cioe' a velocita' doppia o
+  // tripla, con un solo movimento del piede. Si legge come "scivola" o
+  // "salta come una pedina", ed e' il difetto che Lain ha rivisto.
+  //
+  // Adesso la durata e' PROPORZIONALE ai tile (PASSO_MS ciascuno) e il piede
+  // cambia a ogni tile: due tile = due passi veri, uno dopo l'altro. Con un
+  // tetto pero': se il ritardo si accumulasse (campioni piu' fitti
+  // dell'animazione), si accorcia il passo fino a RECUPERO_MIN_MS - e' la
+  // stessa marcia di recupero che il payload fa sul GBA, per la stessa
+  // ragione: meglio camminare un po' piu' svelti che restare indietro.
+  var anim = {};
+  var PASSO_MS = 260;          // quanto dura UN tile
+  // 6 tile: in un campione (~260 ms) nemmeno la bici ne fa di piu' (un tile
+  // ogni 4 frame, ~66 ms), quindi sopra questa soglia non e' una camminata ma
+  // un warp. Era 3, e tagliava fuori proprio la BICI: 4 tile per campione non
+  // venivano animati affatto - l'avatar spariva e ricompariva piu' in la',
+  // che e' l'altra meta' del difetto (2026-08-26).
+  var PASSO_MAX = 6;           // oltre questo non e' una camminata: e' un salto
+  // 60 ms: e' il tile della BICI nel gioco vero (4 frame). Un pavimento
+  // piu' alto sembrava prudente e invece era il difetto: con 90 ms un
+  // campione da 4 tile durava 360 ms contro i ~266 con cui arrivano, e
+  // l'avatar accumulava ritardo fino a otto tile (misurato) - cioe' si
+  // muoveva sempre, ma nel posto sbagliato.
+  var RECUPERO_MIN_MS = 60;    // il passo piu' corto che si concede al recupero
+
+  function aggiornaAnim(g) {
+    var a = anim[g.peer];
+    if (!a) { anim[g.peer] = { x: g.x, y: g.y, dax: g.x, day: g.y, t0: 0, passo: 0, durata: PASSO_MS, tile: 1 }; return; }
+    if (a.x === g.x && a.y === g.y) return;
+    var d = Math.abs(g.x - a.x) + Math.abs(g.y - a.y);
+    var ora = (typeof performance !== "undefined" ? performance.now() : Date.now());
+    // da dove parte la scivolata: dove il disegno lo sta mostrando ADESSO,
+    // non dove stava prima - se arrivano due passi ravvicinati non si torna
+    // indietro di scatto.
+    var cur = posAnim(g.peer, a);
+    var animabile = (d <= PASSO_MAX);
+    a.dax = animabile ? cur.x : g.x;
+    a.day = animabile ? cur.y : g.y;
+    a.x = g.x; a.y = g.y;
+    a.t0 = animabile ? ora : 0;
+    // quanti tile restano DAVVERO da coprire (dal punto in cui siamo ora):
+    // se il campione precedente non era ancora finito, il residuo entra qui.
+    var restanti = Math.max(1, Math.round(Math.abs(a.x - a.dax) + Math.abs(a.y - a.day)));
+    a.tile = restanti;
+    // QUANTO DEVE DURARE, e perche' non e' semplicemente 260 ms per tile.
+    //
+    // L'animazione ha una scadenza: il PROSSIMO campione. Se dura di piu', la
+    // si vede sempre interrotta a meta' e il disegno resta indietro di un
+    // pezzo in piu' a ogni giro - correndo (2 tile ogni ~266 ms) l'avatar
+    // accumulava ritardo invece di correre, ed era una delle due meta' del
+    // difetto (2026-08-26). Quindi: al massimo PASSO_MS per tile, ma non
+    // oltre l'intervallo con cui i campioni stanno arrivando davvero - che e'
+    // poi la velocita' vera di chi cammina. Sotto, un pavimento, per non
+    // trasformare un salto corto in un lampo.
+    var periodo = a.tUltimoCampione ? (ora - a.tUltimoCampione) : restanti * PASSO_MS;
+    a.tUltimoCampione = ora;
+    a.durata = Math.max(restanti * RECUPERO_MIN_MS,
+                        Math.min(restanti * PASSO_MS, periodo));
+    // il piede si alterna a ogni PASSO, come nel gioco
+    a.passo = (a.passo || 0) + 1;
+    // la direzione del passo, dal delta: e' quella da mostrare mentre scivola
+    var dx = g.x - a.dax, dy = g.y - a.day;
+    if (Math.abs(dx) >= Math.abs(dy)) a.dirPasso = dx > 0 ? "dx" : (dx < 0 ? "sx" : a.dirPasso);
+    else a.dirPasso = dy > 0 ? "giu" : "su";
+  }
+
+  // Dove disegnare il giocatore in questo istante, e se sta camminando.
+  function posAnim(peer, a) {
+    a = a || anim[peer];
+    if (!a) return { x: 0, y: 0, cammina: false, f: 0 };
+    if (!a.t0) return { x: a.x, y: a.y, cammina: false, f: 0 };
+    var ora = (typeof performance !== "undefined" ? performance.now() : Date.now());
+    var k = (ora - a.t0) / (a.durata || PASSO_MS);
+    if (k >= 1) { a.t0 = 0; a.dax = a.x; a.day = a.y; return { x: a.x, y: a.y, cammina: false, f: 0 }; }
+    // A che punto siamo DENTRO il tile corrente: con piu' tile da coprire,
+    // ognuno ha il suo ciclo di passo (e il suo piede), invece di un unico
+    // movimento lungo tutta la scivolata.
+    var tile = a.tile || 1;
+    var dentro = (k * tile) % 1;
+    var indice = Math.floor(k * tile);
+    return {
+      x: a.dax + (a.x - a.dax) * k,
+      y: a.day + (a.y - a.day) * k,
+      cammina: true,
+      dir: a.dirPasso,
+      // UN fotogramma di passo per tile, col piede che si alterna per
+      // parita' del passo (come il gioco): A,fermo,B,fermo... - alternare
+      // A e B DENTRO lo stesso passo faceva tremare la gamba
+      f: dentro < 0.72 ? ((((a.passo || 0) + indice) % 2) ? 1 : 2) : 0
+    };
+  }
+
+  // Finche' qualcuno cammina il disegno non puo' fermarsi: `dirty` da solo
+  // basta per gli eventi, non per un'animazione che va avanti da se'.
+  function qualcunoCammina() {
+    for (var i = 0; i < giocatori.length; i++) {
+      var a = anim[giocatori[i].peer];
+      if (a && a.t0) return true;
+    }
+    return false;
+  }
+
+  // ---------------------------------------------------------------- posizioni
+  //
+  // DUE SORGENTI, UN SOLO FORMATO (2026-08-24). Nel pannello PYTHON le
+  // posizioni arrivano da `api/posizioni`, cioe' dai file posizioni-<peer>.json
+  // che client.py scrive su disco. Nel pannello WEB non c'e' nessun server che
+  // le scriva: le manda la scheda del pannello via BroadcastChannel, con lo
+  // STESSO payload {t, viste:[...]}. Da `applica()` in giu' non cambia niente:
+  // e' il motivo per cui il formato si tiene identico invece di inventarne uno
+  // nuovo per il web.
+  function applica(d) {
+    var perPeer = {};
+    var adessoS = (d.t || Date.now() / 1000);
+    (d.viste || []).forEach(function (v) {
+      if (adessoS - (v.t || 0) > 15) return;
+      if (v.io) { var io2 = Object.assign({}, v.io, { peer: v.peer, io: true }); if (!perPeer[v.peer] || io2.t >= perPeer[v.peer].t) perPeer[v.peer] = io2; }
+      Object.keys(v.amici || {}).forEach(function (p) {
+        var a = Object.assign({}, v.amici[p], { peer: +p, io: false });
+        if (!perPeer[p] || (!perPeer[p].io && a.t > perPeer[p].t)) perPeer[p] = a;
+      });
+    });
+    giocatori = Object.keys(perPeer).map(function (p) {
+      var g = perPeer[p]; g.label = g.io ? t("tu", p) : t("amico", p); return g;
+    });
+    giocatori.sort(function (a, b) { return a.peer - b.peer; });
+    giocatori.forEach(aggiornaAnim);
+    aggiornaGiocatori();
+    seguiAdesso();
+    dirty = true;
+  }
+
+  // Il pannello web, se e' aperto in un'altra scheda dello stesso sito.
+  var daWeb = null, daWebT = 0, canalePos = null;
+  try {
+    canalePos = new BroadcastChannel("passotile-posizioni");
+    canalePos.onmessage = function (ev) {
+      if (!ev.data || ev.data.chiedo) return;
+      daWeb = ev.data; daWebT = Date.now();
+      // SI APPLICA SUBITO, senza aspettare il timer del poll: i timer delle
+      // schede in background il browser li rallenta fino a uno al minuto,
+      // ma onmessage arriva sempre - era meta' del "movimento che si
+      // blocca" sul sito (l'altra meta' stava nel pannello, che pubblicava
+      // da un setInterval: ora pubblica a ogni evento di rete).
+      if (dati) applica(daWeb);
+    };
+    // Chi apre la mappa DOPO il pannello non deve aspettare il prossimo
+    // battito: si chiede, e il pannello risponde subito.
+    canalePos.postMessage({ chiedo: true });
+  } catch (e) { /* browser senza BroadcastChannel: resta il fetch */ }
+
+  // Al ritorno in primo piano si riparte subito, qualunque sia la sorgente.
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) {
+      if (canalePos) { try { canalePos.postMessage({ chiedo: true }); } catch (e) {} }
+      poll();
+      dirty = true;
+    }
+  });
+
+  // Sul SITO STATICO `api/posizioni` non esiste e non comparira' mai: senza
+  // questo contatore il poll a 500 ms sparava due 404 al secondo per sempre
+  // (misurati 160 in pochi secondi al primo collaudo). Tre tentativi e si
+  // smette: da li' in poi la sorgente e' solo il pannello web.
+  var apiFallita = 0;
+  function poll() {
+    // Il pannello web ha la precedenza quando sta parlando.
+    if (daWeb && Date.now() - daWebT < 10000) { applica(daWeb); return; }
+    if (apiFallita >= 3) return;
+    fetch("api/posizioni", { cache: "no-store" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        apiFallita = 0;
+        return r.json();
+      })
+      .then(applica)
+      .catch(function () {
+        if (++apiFallita === 3) {
+          console.log("[mappa] api/posizioni non c'e' (sito statico): le posizioni " +
+                      "le aspetto dal pannello web, nella scheda accanto.");
+        }
+      });
+  }
+
+  function aggiornaGiocatori() {
+    var box = $("giocatori"), sel = $("sel-segui"), val = sel.value;
+    if (!giocatori.length) { box.innerHTML = "<span class='vuoto'>" + t("nessunG") + "</span>"; return; }
+    var STATO_NOMI = { 0: "", 1: "in lotta", 2: "in un dialogo", 3: "nel menu", 4: "nella Borsa", 5: "nella Squadra", 6: "nel Pokédex", 7: "nel PokéNav" };
+    var STATO_EN = { 0: "", 1: "in battle", 2: "in a dialog", 3: "in the menu", 4: "in the Bag", 5: "in the Party", 6: "in the Pokédex", 7: "in the PokéNav" };
+    var h = "";
+    giocatori.forEach(function (g) {
+      var eta = Math.round(Date.now() / 1000 - g.t);
+      var st = (lang === "it" ? STATO_NOMI : STATO_EN)[g.stato] || "";
+      h += "<div class=giocatore><span class=pallino style='background:" + (g.io ? "#7fb2ff" : "#16a06e") + "'></span><span><b>"
+        + g.label + "</b> · " + nomeMappaK(chiaveDi(g.gruppo, g.numero)) + " (" + (g.x - MAP_OFFSET) + "," + (g.y - MAP_OFFSET) + ")"
+        + (st ? " · " + st : "") + " <span class=muto>" + (eta > 15 ? t("fermo", eta) : t("dalVivo")) + "</span></span></div>";
+    });
+    box.innerHTML = h;
+    var opts = "<option value=''>—</option>";
+    giocatori.forEach(function (g) { opts += "<option value='" + g.peer + "'>" + g.label + "</option>"; });
+    if (sel.innerHTML !== opts) { sel.innerHTML = opts; sel.value = val; }
+  }
+
+  function seguiAdesso() {
+    if (!segui) return;
+    var g = null;
+    for (var i = 0; i < giocatori.length; i++) if (String(giocatori[i].peer) === String(segui)) g = giocatori[i];
+    if (!g) return;
+    var k = chiaveDi(g.gruppo, g.numero), m = dati.mappe[k];
+    if (!m) return;
+    if (!origine(k)) impostaVista(m.mondo ? { tipo: "mondo", id: m.mondo } : { tipo: "mappa", key: k }, false);
+    var o = origine(k);
+    cx = (o.x + g.x - MAP_OFFSET + 0.5) * T; cy = (o.y + g.y - MAP_OFFSET + 0.5) * T;
+    if (z < 1.5) z = 2;
+    dirty = true;
+  }
+
+  // ------------------------------------------------- il foglio su telefono
+  //
+  // Su schermo stretto il pannello laterale diventa un foglio che sale dal
+  // basso. Si apre e si chiude in tre modi, perche' sul telefono il gesto
+  // giusto non e' mai lo stesso per tutti: toccando la maniglia,
+  // trascinandola, e da solo quando si tocca qualcosa sulla mappa (li' il
+  // dettaglio serve subito, ed e' il momento in cui l'utente lo vuole).
+  var lato = $("lato"), maniglia = $("maniglia");
+  function foglioMobile() {
+    return maniglia && getComputedStyle(maniglia).display !== "none";
+  }
+  function apriFoglio(v) {
+    if (!foglioMobile()) return;
+    lato.classList.toggle("su", v !== false);
+    var e = $("t-maniglia");
+    if (e) e.textContent = lato.classList.contains("su")
+      ? (lang === "it" ? "chiudi" : "close")
+      : (lang === "it" ? "Dettagli" : "Details");
+  }
+  if (maniglia) {
+    var tocco = null;
+    maniglia.addEventListener("click", function () { apriFoglio(!lato.classList.contains("su")); });
+    maniglia.addEventListener("touchstart", function (e) {
+      tocco = { y: e.touches[0].clientY, aperto: lato.classList.contains("su"), mosso: false };
+      lato.style.transition = "none";
+    }, { passive: true });
+    maniglia.addEventListener("touchmove", function (e) {
+      if (!tocco) return;
+      var dy = e.touches[0].clientY - tocco.y;
+      if (Math.abs(dy) > 6) tocco.mosso = true;
+      var base = tocco.aperto ? 0 : lato.offsetHeight - 46;
+      var y = Math.max(0, Math.min(lato.offsetHeight - 46, base + dy));
+      lato.style.transform = "translateY(" + y + "px)";
+    }, { passive: true });
+    maniglia.addEventListener("touchend", function () {
+      if (!tocco) return;
+      lato.style.transition = "";
+      lato.style.transform = "";
+      if (tocco.mosso) {
+        // dove si e' fermato il dito decide: sopra la meta' resta aperto
+        var m = lato.getBoundingClientRect().top;
+        apriFoglio(m < window.innerHeight - lato.offsetHeight / 2);
+      } else {
+        apriFoglio(!tocco.aperto);
+      }
+      tocco = null;
+    });
+  }
+  // Toccando la mappa il dettaglio si apre da solo: e' l'unico momento in cui
+  // si sa con certezza che l'utente lo vuole vedere.
+  if (tela) tela.addEventListener("click", function () {
+    if (foglioMobile()) setTimeout(function () { apriFoglio(true); }, 30);
+  });
+
+  ridimensiona();
+  requestAnimationFrame(disegna);
+  carica();
+
+  window.__mappa = {
+    ridisegna: function () { dirty = true; disegna(); },
+    lingua: function (l) { lang = l; applicaLingua(); },
+    stato: function () {
+      function conta(cache) {
+        var caricate = 0, rotte = 0, tot = 0;
+        Object.keys(cache).forEach(function (k) { tot++; if (cache[k].rotta) rotte++; else if (cache[k].complete && cache[k].naturalWidth) caricate++; });
+        return { tot: tot, caricate: caricate, rotte: rotte };
+      }
+      // lo stato dell'animazione: serve a provarla senza guardare lo schermo
+      var camm = giocatori.map(function (g) {
+        var pa = posAnim(g.peer);
+        return { peer: g.peer, x: Math.round(pa.x * 100) / 100, y: Math.round(pa.y * 100) / 100,
+                 cammina: pa.cammina, frame: pa.f };
+      });
+      return { vista: vista, z: z, cx: cx, cy: cy, lang: lang, giocatori: giocatori.length, camm: camm,
+               immagini: conta(immagini), sprite: conta(sprite), oe: conta(oeImg), item: conta(itemImg),
+               mappe: dati ? Object.keys(dati.mappe).length : 0, porte: porteVisibili().length };
+    },
+    vai: function (key) { selezionata = key; centraSu(key, undefined, undefined, 2); mostraMappa(key); aggiornaNav(); dirty = true; disegna(); },
+    // apre la schedina di un personaggio senza doverlo cliccare: serve alle
+    // prove automatiche (la schedina e' quella che si vede sulla mappa)
+    persona: function (key, i, px, py) {
+      var m = dati.mappe[key];
+      if (!m || !m.personaggi[i]) return null;
+      apriSchedaPersonaggio(m.personaggi[i], key, px || 60, py || 60);
+      mostraPersonaggio(m.personaggi[i], key);
+      return m.personaggi[i].nome;
+    },
+    indietro: indietro
+  };
+})();
+</script>
+</body>
+</html>

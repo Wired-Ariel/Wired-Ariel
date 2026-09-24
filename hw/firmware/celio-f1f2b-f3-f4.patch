@@ -1,0 +1,460 @@
+diff --git a/prj.conf b/prj.conf
+index 5d4e714..7173770 100644
+--- a/prj.conf
++++ b/prj.conf
+@@ -23,6 +23,10 @@ CONFIG_REQUIRES_FULL_LIBCPP=y
+ 
+ CONFIG_TICKLESS_KERNEL=y
+ 
++# F-4: il comando hardware 0x43 riavvia il Pico via software (sys_reboot).
++# E' il sostituto dello scollega/ricollega fra multiboot e sessione di link.
++CONFIG_REBOOT=y
++
+ CONFIG_THREAD_MONITOR=y
+ CONFIG_THREAD_NAME=y
+ CONFIG_DEBUG_THREAD_INFO=y
+diff --git a/src/callbacks/usbLinkCommand.cpp b/src/callbacks/usbLinkCommand.cpp
+index 054df9b..be35030 100644
+--- a/src/callbacks/usbLinkCommand.cpp
++++ b/src/callbacks/usbLinkCommand.cpp
+@@ -6,18 +6,37 @@ static uint8_t g_index = 0;
+ 
+ static uint16_t g_packet[8] = {};
+ static bool g_packetAvailable = false;
++static uint32_t g_packetQueueDrops = 0;
+ 
+ // Queues should be synced by zephyr internally, so no need for atomics or mutexes.
+ // Besides, due to current structurings, usbLink_receiveHandler and loadTransivePacket
+ // run in ISR context, maybe improve later
+ K_MSGQ_DEFINE(g_packetQueue, 16, 200, 1);
+ 
++static bool packetIsEmpty(std::span<const uint8_t, 16> packet)
++{
++    for (uint8_t byte : packet)
++    {
++        if (byte != 0x00) return false;
++    }
++    return true;
++}
++
++static void queuePacket(std::span<const uint8_t, 16> packet)
++{
++    if (packetIsEmpty(packet)) return;
++    if (k_msgq_put(&g_packetQueue, packet.data(), K_NO_WAIT) != 0)
++    {
++        g_packetQueueDrops++;
++    }
++}
++
+ void usbLink_receiveHandler(std::span<const uint8_t> data, void*)
+ {
+-    k_msgq_put(&g_packetQueue, data.subspan<0, 16>().data(), K_NO_WAIT);
+-    k_msgq_put(&g_packetQueue, data.subspan<16, 16>().data(), K_NO_WAIT);
+-    k_msgq_put(&g_packetQueue, data.subspan<32, 16>().data(), K_NO_WAIT);
+-    k_msgq_put(&g_packetQueue, data.subspan<48, 16>().data(), K_NO_WAIT);
++    if (data.size() >= 16) queuePacket(data.subspan<0, 16>());
++    if (data.size() >= 32) queuePacket(data.subspan<16, 16>());
++    if (data.size() >= 48) queuePacket(data.subspan<32, 16>());
++    if (data.size() >= 64) queuePacket(data.subspan<48, 16>());
+ }
+ 
+ static void loadTransivePacket()
+@@ -53,6 +72,7 @@ TransiveStruct usbLinkCommand()
+         .userData = std::span<const uint16_t>(),
+         .init = [](std::span<const uint16_t>) {
+             k_msgq_purge(&g_packetQueue);
++            g_packetQueueDrops = 0;
+             g_index = 0;
+             g_packetAvailable = false;
+         },
+diff --git a/src/control.hpp b/src/control.hpp
+index 5a85beb..fdbfdc9 100644
+--- a/src/control.hpp
++++ b/src/control.hpp
+@@ -1,3 +1,5 @@
++#include <zephyr/sys/reboot.h>
++
+ #include "layers/usbLayer.hpp"
+ #include "layers/packetLayer.hpp"
+ #include "module/link.hpp"
+@@ -20,10 +22,10 @@ class Control
+         GetFirmwareInfo = 0x0F
+     };
+ 
+-    // Firmware version: 2.0.4
++    // Firmware version: 2.0.5 (F-4: hardware command 0x43 Reboot)
+     static constexpr uint8_t FW_VERSION_MAJOR = 2;
+     static constexpr uint8_t FW_VERSION_MINOR = 0;
+-    static constexpr uint8_t FW_VERSION_PATCH = 4;
++    static constexpr uint8_t FW_VERSION_PATCH = 5;
+ 
+     enum class Mode
+     {
+@@ -139,6 +141,7 @@ private:
+         SetVoltage3V3 = 0x40,
+         SetVoltage5V = 0x41,
+         SetLEDColor = 0x42,
++        Reboot = 0x43,      // F-4: [0x43][0xA5] — sys_reboot, equivale a scollegare e ricollegare il Pico
+     };
+ 
+     void receiveCommand(std::span<const uint8_t> data)
+@@ -182,6 +185,17 @@ private:
+                     Hardware::getInstance().setLED(data[1], data[2], data[3], data[4] != 0);
+                 }
+                 break;
++            case HardwareCommand::Reboot:
++                // F-4. Il byte di conferma evita che un byte vagante su EP1
++                // riavvii il Pico a meta' sessione. Dopo il reset l'host vede
++                // sparire e ricomparire il device (stessa sequenza dello
++                // scollega/ricollega fisico, che e' il rimedio che questo
++                // comando sostituisce); il firmware riparte da zero, quindi
++                // modalita' e timing vanno rimandati come dopo un replug.
++                if (data.size() >= 2 && data[1] == 0xA5) {
++                    sys_reboot(SYS_REBOOT_WARM);
++                }
++                break;
+             default: break;
+         }
+     }
+@@ -209,8 +223,12 @@ private:
+             FW_VERSION_MINOR,
+             FW_VERSION_PATCH
+         };
++        // K_NO_WAIT, and it matters: this runs from the command receive handler,
++        // which Zephyr dispatches on the USB work queue — the same queue that
++        // runs the write-completion callback releasing sendData's semaphore.
++        // Blocking here would wait for something only this thread can deliver.
+         UsbLayer::getInstance().sendData(
+-            std::span<const uint8_t>(info, sizeof(info)));
++            std::span<const uint8_t>(info, sizeof(info)), K_NO_WAIT);
+     }
+ 
+     //-////////////////////////////////////////////////////////////////////////////////////////////////////////-//
+diff --git a/src/layers/linkLayer.h b/src/layers/linkLayer.h
+index d8076fb..876d805 100644
+--- a/src/layers/linkLayer.h
++++ b/src/layers/linkLayer.h
+@@ -32,3 +32,17 @@ enum LinkMode link_getMode();
+ void link_changeMode(enum LinkMode mode);
+ 
+ void link_detectCableType(void);
++
++/* F-3: scavalco esplicito della rilevazione del cavo.
++ *
++ *   0 = auto (rilevazione da GP1, il comportamento upstream)
++ *   1 = cablaggio GBA  (SD su GP3)
++ *   2 = cablaggio GBC  (SD su GP4)
++ *
++ * Serve su hardware dove i connettori GBA e GBC sono in PARALLELO sugli stessi
++ * GPIO (game-boy-pico-link-board: J1/J2/J3 su GP0..GP3, e GP4 non cablato).
++ * Li' un cavo DMG/GBC fa leggere GP1 alto, l'euristica sceglie il ramo GBC e
++ * mette SD su un pin che non esiste: il canale resta muto senza un errore.
++ * Lo scavalco e' STICKY: sopravvive alle chiamate successive di
++ * link_detectCableType(), altrimenti il SetMode dopo lo azzererebbe. */
++void link_setCableType(int type);
+diff --git a/src/layers/linkLayer_pio.c b/src/layers/linkLayer_pio.c
+index 2b7bec0..62b5641 100644
+--- a/src/layers/linkLayer_pio.c
++++ b/src/layers/linkLayer_pio.c
+@@ -103,8 +103,22 @@ static bool detect_gbc_cable(void)
+ 
+ static bool g_gbc_cable = false;
+ 
++/* F-3: 0 = auto, 1 = forza cablaggio GBA (SD su GP3), 2 = forza GBC (SD su GP4).
++ * Sticky: link_detectCableType() lo rispetta invece di sovrascriverlo. */
++static int g_cable_override = 0;
++
++void link_setCableType(int type)
++{
++    g_cable_override = type;
++    if (type == 1) g_gbc_cable = false;
++    else if (type == 2) g_gbc_cable = true;
++    else g_gbc_cable = detect_gbc_cable();
++}
++
+ void link_detectCableType(void)
+ {
++    if (g_cable_override == 1) { g_gbc_cable = false; return; }
++    if (g_cable_override == 2) { g_gbc_cable = true;  return; }
+     g_gbc_cable = detect_gbc_cable();
+ }
+ 
+diff --git a/src/layers/usbLayer.hpp b/src/layers/usbLayer.hpp
+index 01413c5..d77af96 100644
+--- a/src/layers/usbLayer.hpp
++++ b/src/layers/usbLayer.hpp
+@@ -60,15 +60,36 @@ public:
+         return true;
+     }
+ 
+-    bool sendData(std::span<const uint8_t> data)
++    // Callers running ON the USB work queue must pass K_NO_WAIT: blocking there
++    // would stall the very queue that runs the completion callback below.
++    // See callGetFirmwareInfo in control.hpp.
++    bool sendData(std::span<const uint8_t> data, k_timeout_t timeout = K_MSEC(100))
+     {
+         if (!m_endpointsEnabled) return false;
++        if (data.size_bytes() > m_sendData.size()) return false;
++
++        // The race sendStatus was fixed for, on the data endpoint. usb_transfer
++        // takes m_sendData BY POINTER and copies it only later, from the USB work
++        // queue: staging a second packet while a transfer is in flight corrupts
++        // the queued one, and the -EBUSY that follows discards the new one too.
++        // The endpoint stays busy until the host has really read the packet, so
++        // waiting here is the back-pressure this path never had. Measured
++        // 2026-08-02: 75 words/s arriving of 126 sent, and not one frame passing
++        // its checksum.
++        if (k_sem_take(&m_waitForFreeEndpoint, timeout) != 0) return false;
++
+         std::ranges::copy(data, m_sendData.begin());
+-        // usb_transfer is async (queues a k_work item), but with bInterval=1 on
+-        // the data endpoint the host polls every 1 ms, so the work-queue delay
+-        // is absorbed within the next poll cycle and has no meaningful impact.
+-        return usb_transfer(dataInEndpoint, m_sendData.data(), data.size_bytes(),
+-            USB_TRANS_WRITE, m_usbWriteDataCallback, this) == 0;
++        int ret = usb_transfer(dataInEndpoint, m_sendData.data(), data.size_bytes(),
++            USB_TRANS_WRITE, m_usbWriteDataCallback, this);
++
++        if (ret != 0)
++        {
++            // Never started: release it, or every later send waits for a
++            // callback that will not come.
++            k_sem_give(&m_waitForFreeEndpoint);
++            return false;
++        }
++        return true;
+     }
+ 
+     void setReceiveCommandHandler(const UsbReceiveHandler& handler, void* userData)
+@@ -187,7 +208,12 @@ private:
+         self->layer->receive(size, self);
+     }
+ 
+-    static void m_usbWriteDataCallback(uint8_t ep, int size, void* userData){ }
++    static void m_usbWriteDataCallback(uint8_t ep, int size, void* userData)
++    {
++        UsbLayer* self = static_cast<UsbLayer*>(userData);
++        // The host has read the packet: m_sendData can be staged again.
++        k_sem_give(&self->m_waitForFreeEndpoint);
++    }
+ 
+     static void m_usbWriteStatusCallback(uint8_t ep, int size, void* userData)
+     {
+diff --git a/src/module/rawRelay.cpp b/src/module/rawRelay.cpp
+index 1474ced..2e42665 100644
+--- a/src/module/rawRelay.cpp
++++ b/src/module/rawRelay.cpp
+@@ -6,6 +6,11 @@ void RawRelayModule::execute()
+ {
+     m_cancel = false;
+ 
++    // F-1: every fresh SetMode starts from the default period, so a timing
++    // left over from a previous session cannot leak into this one. The host
++    // that wants something else sends SetRawTiming after SetMode.
++    rawRelay_setTiming(rawRelay_defaultTiming);
++
+     // Step 1: Emit AwaitMode — server will assign master/slave
+     sendLinkStatus(LinkStatus::AwaitMode);
+     k_sem_take(&m_waitForLinkModeCommand, K_FOREVER);
+@@ -52,6 +57,24 @@ void RawRelayModule::receiveCommand(std::span<const uint8_t> command)
+             // Ignored in passthrough mode — relay is already running
+             break;
+ 
++        case LinkModeCommand::SetRawTiming:
++            if (command.size() >= 5)
++            {
++                rawRelay_setTiming((uint32_t)command[1]
++                                   | ((uint32_t)command[2] << 8)
++                                   | ((uint32_t)command[3] << 16)
++                                   | ((uint32_t)command[4] << 24));
++            }
++            break;
++
++        // F-3: arriva DOPO SetMode (che ha gia' fatto la rilevazione automatica)
++        // e PRIMA di StartHandshake, che e' quando link_changeMode carica il
++        // programma PIO leggendo il tipo di cavo. La finestra e' quella.
++        case LinkModeCommand::SetCableType:
++            if (command.size() >= 2)
++                link_setCableType((int)command[1]);
++            break;
++
+         default: break;
+     }
+ }
+diff --git a/src/module/rawRelay.hpp b/src/module/rawRelay.hpp
+index ee5e965..df37160 100644
+--- a/src/module/rawRelay.hpp
++++ b/src/module/rawRelay.hpp
+@@ -12,7 +12,9 @@ private:
+         SetModeMaster = 0x10,
+         SetModeSlave = 0x11,
+         StartHandshake = 0x12,
+-        ConnectLink = 0x13
++        ConnectLink = 0x13,
++        SetRawTiming = 0x14,  // F-1: [0x14][u32 LE] PIO iterations per exchange
++        SetCableType = 0x15   // F-3: [0x15][u8] 0=auto 1=GBA(SD su GP3) 2=GBC(SD su GP4)
+     };
+ 
+ public:
+diff --git a/src/sections/rawRelaySection.cpp b/src/sections/rawRelaySection.cpp
+index 1418198..79347e3 100644
+--- a/src/sections/rawRelaySection.cpp
++++ b/src/sections/rawRelaySection.cpp
+@@ -8,15 +8,45 @@ K_MSGQ_DEFINE(g_rawRelayTxQueue, 2, 256, 2);
+ // RX queue: GBA → USB (filled by PIO ISR, drained by process() loop)
+ K_MSGQ_DEFINE(g_rawRelayRxQueue, 2, 256, 2);
+ 
++static uint32_t g_rawRelayTxQueueDrops = 0;
++static uint32_t g_rawRelayRxQueueDrops = 0;
++static uint32_t g_rawRelayTxWords = 0;
++
++// USB IN path (GBA → host). g_rawRelayUsbFlushFails must stay at 0 while a host
++// is listening: anything else means the host stopped reading for over 100 ms.
++static uint32_t g_rawRelayUsbPackets = 0;
++static uint32_t g_rawRelayUsbFlushFails = 0;
++static uint32_t g_rawRelayUsbDroppedWords = 0;
++
++static uint32_t g_rawRelayTiming = rawRelay_defaultTiming;
++
++void rawRelay_setTiming(uint32_t iterations)
++{
++    // Floor guard: below ~200 iterations (~108us) the wait loop no longer
++    // dominates the exchange and the PIO fixed overhead takes over — values
++    // this low are a host bug, not a configuration.
++    if (iterations < 200)
++    {
++        iterations = 200;
++    }
++    g_rawRelayTiming = iterations;
++}
++
+ void rawRelay_receiveHandler(std::span<const uint8_t> data, void*)
+ {
+-    // 64-byte USB packet = 32 x uint16_t values
++    // Variable-length USB packet, up to 64 bytes = 32 x uint16_t values.
++    // Every word the host sends is real payload: the host must not pad
++    // (F-2: 0x0000 is a legal data word, there is no in-band "empty" value).
+     const uint16_t* words = reinterpret_cast<const uint16_t*>(data.data());
+     for (size_t i = 0; i < 32 && i * 2 < data.size(); i++)
+     {
+-        if (words[i] != 0x0000)
++        if (k_msgq_put(&g_rawRelayTxQueue, &words[i], K_NO_WAIT) != 0)
++        {
++            g_rawRelayTxQueueDrops++;
++        }
++        else
+         {
+-            k_msgq_put(&g_rawRelayTxQueue, &words[i], K_NO_WAIT);
++            g_rawRelayTxWords++;
+         }
+     }
+ }
+@@ -25,6 +55,12 @@ RawRelaySection::RawRelaySection()
+ {
+     k_msgq_purge(&g_rawRelayTxQueue);
+     k_msgq_purge(&g_rawRelayRxQueue);
++    g_rawRelayTxQueueDrops = 0;
++    g_rawRelayRxQueueDrops = 0;
++    g_rawRelayTxWords = 0;
++    g_rawRelayUsbPackets = 0;
++    g_rawRelayUsbFlushFails = 0;
++    g_rawRelayUsbDroppedWords = 0;
+ 
+     link_setTransmitCallback(&transmitCallback, this);
+     link_setReceiveCallback(&receiveCallback, this);
+@@ -75,28 +111,52 @@ void RawRelaySection::process()
+ 
+ void RawRelaySection::flushRxBuffer()
+ {
+-    UsbLayer::getInstance().sendData(
+-        std::span(reinterpret_cast<const uint8_t*>(m_rxPacket.data()), 64)
+-    );
++    if (m_rxPacketIndex == 0) return;
++
++    // Send only the words actually received (F-2): a fixed 64-byte packet
++    // would need zero padding, and 0x0000 is a legal data word — the host
++    // could not tell padding from payload.
++    if (UsbLayer::getInstance().sendData(
++            std::span(reinterpret_cast<const uint8_t*>(m_rxPacket.data()),
++                      m_rxPacketIndex * 2)))
++    {
++        g_rawRelayUsbPackets++;
++        m_rxPacketIndex = 0;
++        return;
++    }
+ 
+-    std::memset(m_rxPacket.data(), 0x00, 64);
+-    m_rxPacketIndex = 0;
++    // Send refused (host not reading for 100 ms). The words STAY in the buffer
++    // for the next flush instead of vanishing: dropping them silently here is
++    // what made every frame arrive with holes and fail its checksum.
++    g_rawRelayUsbFlushFails++;
++
++    if (m_rxPacketIndex >= m_rxPacket.size())
++    {
++        // Buffer full and still nobody listening. Now the words must go, or the
++        // drain loop in process() would write past the array — and at 100 ms of
++        // silence the link is already broken; the GBA re-syncs on its own.
++        g_rawRelayUsbDroppedWords += m_rxPacketIndex;
++        m_rxPacketIndex = 0;
++    }
+ }
+ 
+ struct NextTransmit RawRelaySection::transmitCallback(void* userData)
+ {
+-    RawRelaySection* self = static_cast<RawRelaySection*>(userData);
++    (void)userData;
+ 
+     uint16_t value = 0x7FFF; // CMD_NONE: safe idle value for GBA Multi mode
+     k_msgq_get(&g_rawRelayTxQueue, &value, K_NO_WAIT);
+ 
+-    return { value, self->defaultTimingUs };
++    return { value, g_rawRelayTiming };
+ }
+ 
+ void RawRelaySection::receiveCallback(uint16_t rx, void* userData)
+ {
+     (void)userData;
+-    k_msgq_put(&g_rawRelayRxQueue, &rx, K_NO_WAIT);
++    if (k_msgq_put(&g_rawRelayRxQueue, &rx, K_NO_WAIT) != 0)
++    {
++        g_rawRelayRxQueueDrops++;
++    }
+ }
+ 
+ void RawRelaySection::transiveDoneCallback(uint16_t rx, uint16_t tx, void* userData)
+diff --git a/src/sections/rawRelaySection.hpp b/src/sections/rawRelaySection.hpp
+index 39f8f20..5d341be 100644
+--- a/src/sections/rawRelaySection.hpp
++++ b/src/sections/rawRelaySection.hpp
+@@ -38,10 +38,13 @@ private:
+ 
+     std::array<uint16_t, 32> m_rxPacket = {};
+     size_t m_rxPacketIndex = 0;
+-
+-    // Default timing: ~8.3ms between exchanges (suitable for Advance Wars)
+-    // At PIO clkdiv 67.816 (~540ns/instruction), 15370 iterations ≈ 8.3ms
+-    static constexpr uint32_t defaultTimingUs = 15370;
+ };
+ 
+ void rawRelay_receiveHandler(std::span<const uint8_t> data, void*);
++
++// F-1: master exchange period, runtime-configurable (SetRawTiming, 0x14).
++// The unit is PIO wait-loop iterations (~540ns each at clkdiv 67.816), NOT
++// microseconds — the historical name is kept to match NextTransmit.timingUs.
++// Default 15370 ≈ 8.3ms between exchanges. Only the master consumes it.
++inline constexpr uint32_t rawRelay_defaultTiming = 15370;
++void rawRelay_setTiming(uint32_t iterations);
+diff --git a/src/sections/usbSection.hpp b/src/sections/usbSection.hpp
+index 2efdac7..0eb5f53 100644
+--- a/src/sections/usbSection.hpp
++++ b/src/sections/usbSection.hpp
+@@ -92,7 +92,7 @@ private:
+         return true;
+     }
+ 
+-    static constexpr uint8_t maxBufferedPackets = 4;
++    static constexpr uint8_t maxBufferedPackets = 1;
+     static constexpr uint8_t packetSize = 8;
+ 
+     bool m_cancel = false;

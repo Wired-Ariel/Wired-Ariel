@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>test sio.js</title>
+<style>body{font:14px Consolas,monospace;background:#0e1117;color:#e6e6e6;padding:16px} .ok{color:#7ee787} .ko{color:#ff7b72}</style>
+</head>
+<body>
+<h2>sio.js — gli stessi casi di net/test_deframer.py</h2>
+<pre id="out"></pre>
+<script src="js/sio.js"></script>
+<script>
+(function () {
+  var S = GbaSio.SIO, out = [], ok = 0, ko = 0;
+  function eq(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function t(nome, fn) {
+    try { var r = fn(); if (r === true) { ok++; out.push("<span class=ok>OK </span>" + nome); }
+          else { ko++; out.push("<span class=ko>KO </span>" + nome + " -> " + JSON.stringify(r)); } }
+    catch (e) { ko++; out.push("<span class=ko>KO </span>" + nome + " -> " + e.message); }
+  }
+  function frames(list) { return list.map(function (f) { return [f.type, f.words]; }); }
+  function cat() { var n = 0, i; for (i = 0; i < arguments.length; i++) n += arguments[i].length;
+    var r = new Uint8Array(n), o = 0; for (i = 0; i < arguments.length; i++) { r.set(arguments[i], o); o += arguments[i].length; } return r; }
+  function words(arr) { return GbaSio.wordsToBytes(arr); }
+
+  t("frame ping noto: SYNC, HEAD 0x0302, somma 0", function () {
+    var w = GbaSio.bytesToWords(GbaSio.sioFrame(S.T_PING, [0x1234, 0x5678]));
+    var s = 0; for (var i = 1; i < w.length; i++) s += w[i];
+    return w[0] === S.SYNC && w[1] === 0x0302 && (s & 0xFFFF) === 0 || [w, s & 0xFFFF];
+  });
+  t("nessun padding: ping con 2 parole = 10 byte", function () { return GbaSio.sioFrame(S.T_PING, [1, 2]).length === 10; });
+  t("frame pulito", function () {
+    var d = new GbaSio.SioDeframer();
+    var o = d.feed(GbaSio.sioFrame(S.T_PING, [0x1111, 0x2222]));
+    return eq(frames(o), [[S.T_PING, [0x1111, 0x2222]]]) && d.frameErr === 0 || frames(o);
+  });
+  t("frame spezzato su tre read (taglio a meta' parola)", function () {
+    var d = new GbaSio.SioDeframer(), raw = GbaSio.sioFrame(S.T_EVENT, [1, 2, 3, 4, 5, 6]);
+    var o = [].concat(frames(d.feed(raw.subarray(0, 5))), frames(d.feed(raw.subarray(5, 11))), frames(d.feed(raw.subarray(11))));
+    return eq(o, [[S.T_EVENT, [1, 2, 3, 4, 5, 6]]]) && d.frameErr === 0 || o;
+  });
+  t("zero legittimo nei dati", function () {
+    var d = new GbaSio.SioDeframer(), ev = [0x0001, 0x0000, 0x0000, 0x0200, 0x0000, 0x0005];
+    var o = frames(d.feed(GbaSio.sioFrame(S.T_EVENT, ev)));
+    return eq(o, [[S.T_EVENT, ev]]) && d.frameErr === 0 || o;
+  });
+  t("idle e rumore fra i frame", function () {
+    var d = new GbaSio.SioDeframer();
+    var rumore = words([0x7FFF, 0xFFFF, 0x7FFF, 0x1234]);
+    var o = frames(d.feed(cat(rumore, GbaSio.sioFrame(S.T_PING, [9]), words([0xFFFF, 0x7FFF, 0xFFFF]), GbaSio.sioFrame(S.T_PING, [10]))));
+    return eq(o, [[S.T_PING, [9]], [S.T_PING, [10]]]) && d.frameErr === 0 && d.idleWords === 6 || [o, d.idleWords];
+  });
+  t("checksum rotto e riaggancio", function () {
+    var d = new GbaSio.SioDeframer(), raw = GbaSio.sioFrame(S.T_PING, [0x1111]);
+    raw[raw.length - 1] ^= 0x01;
+    var o = frames(d.feed(raw));
+    if (!(eq(o, []) && d.frameErr === 1 && d.resync === 1)) return ["primo", o, d.frameErr, d.resync];
+    var o2 = frames(d.feed(GbaSio.sioFrame(S.T_PING, [0x3333])));
+    return eq(o2, [[S.T_PING, [0x3333]]]) || o2;
+  });
+  t("testa implausibile (tipo 0)", function () {
+    var d = new GbaSio.SioDeframer();
+    var buf = words([S.SYNC, 0x0001, 0x1234, 0xFFFF]);
+    var o = frames(d.feed(buf));
+    if (!(eq(o, []) && d.frameErr === 1)) return ["primo", o, d.frameErr];
+    var o2 = frames(d.feed(GbaSio.sioFrame(S.T_PING, [5])));
+    return eq(o2, [[S.T_PING, [5]]]) || o2;
+  });
+  t("frame senza dati", function () {
+    var d = new GbaSio.SioDeframer();
+    var head = (S.T_PING << 8) | 0;
+    var o = frames(d.feed(words([S.SYNC, head, (-head) & 0xFFFF])));
+    return eq(o, [[S.T_PING, []]]) || o;
+  });
+  t("giro completo evento, un byte alla volta", function () {
+    var d = new GbaSio.SioDeframer();
+    var ev12 = new Uint8Array([1, 2, 0, 7, 0, 2, 0x0B, 0x00, 0xF5, 0xFF, 1, 0]);
+    var raw = GbaSio.sioFrame(S.T_EVENT, GbaSio.bytesToWords(ev12));
+    var o = [];
+    for (var i = 0; i < raw.length; i++) o = o.concat(d.feed(raw.subarray(i, i + 1)));
+    if (o.length !== 1 || o[0].type !== S.T_EVENT || o[0].words.length !== S.EVENT_WORDS) return o;
+    var ric = GbaSio.wordsToBytes(o[0].words);
+    return eq(Array.from(ric), Array.from(ev12)) && d.frameErr === 0 || Array.from(ric);
+  });
+  t("describeEvent: PASSO e STATO come protocol.py", function () {
+    var passo = new Uint8Array([1, 2, 0, 7, 0, 2, 0x0B, 0x00, 0xF5, 0xFF, 1, 0]);
+    var stato = new Uint8Array([5, 4, 0, 9, 0, 32, 0, 0, 0, 0, 0, 0]);
+    var a = GbaSio.describeEvent(passo), b = GbaSio.describeEvent(stato);
+    return (a === "#  7 PASSO  mappa 0.2 (11,-11) su" && b === "#  9 STATO  mappa 0.32 zaino") || [a, b];
+  });
+  t("describeSonda: stato io / sezioni dai bit 8-11 / 12-15", function () {
+    var w = [722, 7, 0x0100, 0x0000, 0x0002 | (4 << 8) | (1 << 12), 0x5E70, 0x0808, 30];
+    var s = GbaSio.describeSonda(w);
+    return (s.indexOf("stato io zaino | sezioni 1") >= 0 && s.indexOf("cb2 0x08085E70") >= 0 && s.indexOf("overworld si") >= 0) || s;
+  });
+
+  document.getElementById("out").innerHTML = out.join("\n") + "\n\nRISULTATO: " + ok + " ok, " + ko + " ko" + (ko ? "  <span class=ko>FALLITO</span>" : "  <span class=ok>TUTTO VERDE</span>");
+  window.__risultato = { ok: ok, ko: ko };
+})();
+</script>
+</body>
+</html>

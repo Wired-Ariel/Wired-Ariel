@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>autotest multiboot.js</title>
+<style>body{font:14px Consolas,monospace;background:#0e1117;color:#e6e6e6;padding:16px;white-space:pre-wrap} .ok{color:#7ee787} .ko{color:#ff7b72}</style>
+</head>
+<body>
+<h2>multiboot.js — lo stesso autotest di `mb_multi.py --autotest`, nel browser</h2>
+<div id="out">in corso...</div>
+<script src="js/multiboot.js"></script>
+<script src="js/mb_sim.js"></script>
+<script>
+(async function () {
+  var M = GbaMultiboot, K = M.K, Sim = GbaMbSim, out = [], fallito = false;
+  var el = document.getElementById("out");
+  function p(s, cls) { out.push(cls ? "<span class=" + cls + ">" + s + "</span>" : s); el.innerHTML = out.join("\n"); }
+  function ko(s) { fallito = true; p("FALLITO: " + s, "ko"); }
+  var TIM = { timingFast: 3700, timingWait: Math.floor(70 * 1000 / 0.54) };
+
+  // ROM casuale riproducibile (LCG), 0x800 byte, con la prima word di branch.
+  var st = 1234 >>> 0, rom = new Uint8Array(0x800);
+  for (var i = 0; i < rom.length; i++) { st = (Math.imul(st, 1103515245) + 12345) >>> 0; rom[i] = (st >>> 16) & 0xFF; }
+  rom[0] = 0x2e; rom[1] = 0; rom[2] = 0; rom[3] = 0xea;
+  rom = M.preparaRom(rom);
+
+  try {
+    p("== autotest 1: corsa pulita ==");
+    var slave = new Sim.SlaveSimulato(rom), link = new Sim.LinkSimulato(slave);
+    var r = await new M.Multiboot(link, TIM).run(rom);
+    var err = slave.verifica();
+    if (err.length) ko(err.join("; ")); else p("  ok: " + r.byte + " byte, " + r.paroleInviate + " parole inviate, " + r.scartate + " scartate, CRC " + M.hex(r.crc), "ok");
+
+    p("== autotest 1b: cc, uu e rr vanno letti per quello che sono ==");
+    slave = new Sim.SlaveSimulato(rom); link = new Sim.LinkSimulato(slave);
+    var mb = new M.Multiboot(link, Object.assign({ maxAttempts: 1 }, TIM));
+    await mb.run(rom);
+    if (mb._diagCc !== slave.cc || mb.rr !== slave.rr) ko("letti cc=" + mb._diagCc + " rr=" + mb.rr + ", attesi cc=" + slave.cc + " rr=" + slave.rr);
+    else if (mb.nonc.length !== 2) ko("fra palette e dati devono esserci 2 risposte diverse da cc, viste " + mb.nonc.length);
+    else p("  ok: cc=" + M.hex(mb._diagCc, 2) + " rr=" + M.hex(mb.rr, 2) + ", e uu/rr sono esattamente 2", "ok");
+
+    p("== autotest 2: costanti multiplay ==");
+    if (K.CRCC_START_MULTI !== 0xFFF8 || K.CRCC_XOR_MULTI !== 0xA517 || K.DATA_XOR_MULTI !== 0x6465646F) ko("costanti multiplay non GBATEK");
+    else p("  ok: c=FFF8h x=A517h k=6465646Fh (GBATEK, ramo multiplay)", "ok");
+
+    p("== autotest 3: una parola spuria DEVE essere vista, in OGNI fase ==");
+    var periodi = [5, 23, 61, 97, 211], tuttiVisti = true;
+    for (var pi = 0; pi < periodi.length; pi++) {
+      slave = new Sim.SlaveSimulato(rom); link = new Sim.LinkSimulato(slave, { iniettaOgni: periodi[pi] });
+      var passato = false;
+      try { await new M.Multiboot(link, Object.assign({ maxAttempts: 1 }, TIM)).run(rom); passato = true; }
+      catch (e) { if (!(e instanceof M.MultibootError)) throw e; }
+      if (passato) { tuttiVisti = false; ko("con una parola ogni " + periodi[pi] + " scambi il trasferimento e' andato a buon fine senza accorgersene"); }
+    }
+    if (tuttiVisti) p("  ok: ogni periodo provato (5, 23, 61, 97, 211) viene nominato", "ok");
+
+    p("== autotest 3b: il difetto del 2026-08-02 si riproduce e resta chiuso ==");
+    slave = new Sim.SlaveSimulato(rom); link = new Sim.LinkSimulato(slave);
+    var fallitoSenza = null;
+    try { await new M.Multiboot(link, Object.assign({ maxAttempts: 1, sovrapponi: false }, TIM)).run(rom); }
+    catch (e) { if (!(e instanceof M.MultibootError)) throw e; fallitoSenza = e.message.split("\n")[0]; }
+    if (!fallitoSenza) ko("senza sovrapposizione doveva fallire: il modello del trasporto non riproduce piu' il difetto reale");
+    else p("  ok: senza sovrapposizione fallisce -> " + fallitoSenza.slice(-60) + "\n      (il firmware simulato ha mandato " + link.idleMandati + " parole 0x7FFF a coda vuota)", "ok");
+    slave = new Sim.SlaveSimulato(rom); link = new Sim.LinkSimulato(slave);
+    await new M.Multiboot(link, Object.assign({ maxAttempts: 1 }, TIM)).run(rom);
+    if (slave.verifica().length) ko("con la sovrapposizione il trasferimento e' corrotto");
+    else p("  ok: con sovrapposizione passa, 0x7FFF a coda vuota: " + link.idleMandati, "ok");
+
+    p("== autotest 3c: quanta latenza dell'host regge la scorta ==");
+    var ultimoOk = 0, buchi = [1, 2, 4, 8, 16];
+    for (var bi = 0; bi < buchi.length; bi++) {
+      slave = new Sim.SlaveSimulato(rom); link = new Sim.LinkSimulato(slave, { buco: buchi[bi] });
+      try { await new M.Multiboot(link, Object.assign({ maxAttempts: 1 }, TIM)).run(rom); }
+      catch (e) { if (!(e instanceof M.MultibootError)) throw e; break; }
+      if (slave.verifica().length || link.idleMandati) break;
+      ultimoOk = buchi[bi];
+    }
+    if (ultimoOk < 8) ko("la scorta regge solo " + ultimoOk + " scambi di buco, meno del margine 8x"); else p("  ok: nessun 0x7FFF a coda vuota fino a " + ultimoOk + " scambi di buco (sul filo ne serve ~1)", "ok");
+
+    p("== autotest 4: padding a 0x10 ==");
+    if (M.preparaRom(new Uint8Array(11948)).length !== 11952) ko("padding sbagliato"); else p("  ok: 11948 -> 11952 byte (mbstub.gba)", "ok");
+
+    p("== autotest 5: il file vero del progetto (se la pagina e' servita dalla radice di overworld-link) ==");
+    try {
+      var resp = await fetch("../hw/mbstub/build/mbstub.gba");
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      var vera = M.preparaRom(new Uint8Array(await resp.arrayBuffer()));
+      slave = new Sim.SlaveSimulato(vera); link = new Sim.LinkSimulato(slave);
+      var r5 = await new M.Multiboot(link, TIM).run(vera);
+      var e5 = slave.verifica();
+      if (e5.length) ko("su mbstub.gba: " + e5.join("; "));
+      else p("  ok: mbstub.gba, " + vera.length + " byte -> " + r5.paroleInviate + " parole (~" + Math.round(r5.paroleInviate * 2.4 / 1000) + " s a timing 3700, ~" + Math.round(r5.paroleInviate * 4.4 / 1000) + " s a 7400)", "ok");
+    } catch (e) { p("  (saltato: mbstub.gba non raggiungibile da qui: " + e.message + ")"); }
+  } catch (e) {
+    ko("eccezione: " + (e.stack || e.message));
+  }
+  p(fallito ? "\nFALLITO" : "\nTUTTO PASSATO (senza hardware: dice che il protocollo e' coerente, non che il cavo funziona).", fallito ? "ko" : "ok");
+  window.__risultato = { fallito: fallito };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+# --- artefatti di build (si rigenerano) ---
+build/
+hw/*/build/
+__pycache__/
+*.pyc
+
+# --- script Lua GENERATI da build.ps1 (il sorgente e' mgba/inject_body.lua) ---
+mgba/inject.*.lua
+
+# --- dati della Mappa live: generati da tools/gen_mappa.py dalla decomp ---
+net/mappa/
+net/posizioni/
+net/log/
+*.log
+
+# --- MAI su git: giochi e salvataggi (servono i TUOI, dalla TUA cartuccia) ---
+*.gba
+*.gbc
+*.gb
+*.sav
+*.srm
+*.ss[0-9]
+
+# --- firmware compilati: si scaricano dalla pagina Releases ---
+*.uf2
+*.elf
+
+# --- config locali ---
+passotile-config.lua
+net/pannello.config.json.local
+.venv/
+.vscode/

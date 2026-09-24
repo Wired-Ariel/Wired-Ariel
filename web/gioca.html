@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>gen3-poke-multiplayer — Pannello web</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="img/favicon.png">
+<link rel="alternate" hreflang="en" href="gioca-en.html">
+<script src="js/lingua.js"></script>
+<!--
+  Il pannello gen3-poke-multiplayer NEL BROWSER (2026-08-23): stessa faccia di
+  net/pannello.html, ma qui non c'e' nessun programma dietro. Il Pico si parla
+  via WebUSB (device.js), il gioco si carica nel GBA via multiboot
+  (multiboot.js), la partita passa dal relay via WebSocket (relay.js +
+  bridge.js, il porting di client.py). Chrome o Edge, pagina su https o
+  localhost; su Windows il driver WinUSB (Zadig) come sempre.
+
+  NIENTE RISORSE ESTERNE: le immagini stanno in img/ e sono i pixel della
+  decomp. La pagina funziona anche servita da un PC offline in LAN.
+-->
+<style>
+  :root {
+    --verde-cupo: #0f3428; --verde: #0f6b4a; --verde-vivo: #16a06e; --verde-chiaro: #3fd68f;
+    --carta: #f2ede1; --scheda: #fffdf7; --bordo: #dfd7c4; --bordo-scuro: #cbc3b0;
+    --inchiostro: #16211c; --tenue: #6b7269; --tenue2: #8b9189; --ambra: #c07a12; --rosso: #b3392f;
+    --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--inchiostro); background: var(--carta); }
+  img.px { image-rendering: pixelated; }
+  [hidden] { display: none !important; }
+
+  header { position: relative; overflow: hidden; background: var(--verde-cupo); color: #eaf5ee; padding: 20px 0 22px; }
+  header .erba, header .velo { position: absolute; inset: 0; }
+  header .erba { background: url(img/tile-erba-alta.png) 0 0/96px 96px repeat; image-rendering: pixelated; opacity: .9; }
+  header .velo { background: linear-gradient(100deg, rgba(8,26,20,.92) 0%, rgba(8,26,20,.78) 55%, rgba(8,26,20,.52) 100%); }
+  header .dentro { position: relative; max-width: 1160px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .marchio { position: relative; width: 56px; height: 56px; flex: none; border-radius: 13px; overflow: hidden; border: 2px solid #08211a; box-shadow: 0 6px 16px rgba(0,0,0,.35); }
+  .marchio .fondo { position: absolute; inset: 0; background: url(img/tile-erba-alta.png) 0 0/30px 30px repeat; image-rendering: pixelated; }
+  .marchio .o1 { position: absolute; left: 5px; bottom: 5px; width: 25px; height: 25px; }
+  .marchio .o2 { position: absolute; right: 4px; top: 4px; width: 22px; height: 22px; }
+  header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+  header .sub { margin: 3px 0 0; font-size: 13px; color: rgba(234,245,238,.74); }
+  .targhe { margin-left: auto; display: flex; gap: 9px; flex-wrap: wrap; }
+  .targa { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 9px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); font: 12px/1 var(--mono); color: #bfe2cd; max-width: 420px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .targa .led { width: 7px; height: 7px; border-radius: 50%; background: #7a857e; flex: none; }
+  .targa .led.ok { background: var(--verde-chiaro); } .targa .led.no { background: #ff7b72; } .targa .led.attesa { background: #ffcc70; }
+
+  main { max-width: 1160px; margin: 22px auto 40px; padding: 0 24px; }
+
+  #avviso { display: flex; gap: 13px; align-items: flex-start; background: #fdf4dd; border: 1px solid #e8ce8f; border-left: 5px solid var(--ambra); border-radius: 12px; padding: 13px 17px; margin-bottom: 18px; font-size: 14px; }
+  #avviso .bang { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border-radius: 50%; background: var(--ambra); color: #fff; font-weight: 800; font-size: 14px; }
+
+  .stato { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .scheda { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 16px; padding: 17px 19px; box-shadow: 0 1px 2px rgba(20,30,24,.05); }
+  .etichetta { margin: 0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .14em; color: var(--tenue2); }
+  .scheda.presenza { position: relative; }
+  .grosso { margin: 11px 0 0; font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
+  .riga-mono { margin: 4px 0 0; font: 12.5px/1.4 var(--mono); color: #5f6b62; }
+  .spia { position: absolute; top: 16px; right: 18px; display: flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--tenue2); }
+  .spia i { width: 8px; height: 8px; border-radius: 50%; background: #c3c3cc; }
+  .spia.ok { color: var(--verde); } .spia.ok i { background: var(--verde-vivo); }
+  .spia.no { color: var(--rosso); } .spia.no i { background: var(--rosso); }
+  .spia.attesa { color: var(--ambra); } .spia.attesa i { background: var(--ambra); }
+  .amici { margin: 8px 0 0; padding: 0; list-style: none; font: 12.5px/1.5 var(--mono); color: #3b463f; }
+  .amici li { display: flex; gap: 8px; align-items: baseline; }
+  .amici li b { color: var(--verde); }
+
+  .scheda.canale { background: var(--verde-cupo); border-color: #0b2a20; color: #dcefe3; }
+  .scheda.canale .etichetta { color: rgba(220,239,227,.6); }
+  .cifra { display: flex; align-items: baseline; gap: 8px; margin-top: 11px; }
+  .cifra b { font: 700 32px/1 var(--mono); letter-spacing: -.02em; }
+  .cifra span { font: 12.5px/1 var(--mono); color: rgba(220,239,227,.65); }
+  .conti { display: flex; gap: 8px; margin-top: 13px; }
+  .conti div { flex: 1; border-radius: 9px; background: rgba(255,255,255,.07); padding: 7px 10px; }
+  .conti small { display: block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: rgba(220,239,227,.55); }
+  .conti b { display: block; margin-top: 4px; font: 700 15px/1 var(--mono); }
+
+  .due { display: grid; grid-template-columns: minmax(0,1.32fr) minmax(0,1fr); gap: 18px; align-items: start; margin-top: 18px; }
+  .pannello { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 16px; padding: 20px 22px 22px; box-shadow: 0 1px 2px rgba(20,30,24,.05); }
+  .pannello h2 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+  .pannello p.aiuto { margin: 6px 0 16px; font-size: 13px; line-height: 1.55; color: var(--tenue); }
+  .passi { display: flex; flex-direction: column; gap: 10px; }
+  button.azione { display: flex; align-items: center; gap: 15px; width: 100%; text-align: left; border: 1px solid #e3dbc9; background: var(--scheda); border-radius: 13px; padding: 13px 15px; font: inherit; cursor: pointer; }
+  button.azione:hover:not(:disabled) { border-color: var(--bordo-scuro); background: #fffaf0; }
+  button.azione:disabled { cursor: not-allowed; opacity: .55; }
+  button.azione .num { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 10px; background: #e9e2d0; color: #5f6b62; font: 700 15px/1 var(--mono); }
+  button.azione .testo { min-width: 0; }
+  button.azione .testo b { display: block; font-size: 15px; font-weight: 700; }
+  button.azione .testo small { display: block; margin-top: 3px; font-size: 12.5px; color: var(--tenue); }
+  button.azione .fine { margin-left: auto; flex: none; display: grid; place-items: center; height: 38px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--bordo-scuro); background: #fff; font-size: 13px; font-weight: 700; color: #3b463f; }
+  button.azione.viva { border-color: #cfe3d6; background: #f3faf5; }
+  button.azione.viva .num { background: var(--verde); color: #fff; }
+  button.azione.viva .fine { background: var(--inchiostro); border-color: var(--inchiostro); color: #fff; }
+  button.azione.lavoro .num { background: var(--ambra); color: #fff; }
+
+  .separa { height: 1px; background: #e6dfcd; margin: 18px 0 14px; }
+  .attrezzi { display: flex; flex-wrap: wrap; gap: 9px; }
+  button.minore, a.minore { height: 38px; padding: 0 15px; border: 1px solid var(--bordo-scuro); border-radius: 10px; background: #fff; color: #3b463f; font: 600 13px/38px inherit; font-family: inherit; cursor: pointer; text-decoration: none; display: inline-block; }
+  button.minore:hover, a.minore:hover { background: #f5f0e3; }
+  button.minore:disabled { opacity: .5; cursor: not-allowed; }
+
+  label.campo { display: block; }
+  label.campo > span { display: block; font-size: 11.5px; font-weight: 600; color: #3b463f; margin-bottom: 6px; }
+  label.campo > small.guida { display: block; margin-top: 5px; font-size: 11.5px; line-height: 1.5; color: var(--tenue); }
+  input[type=text], input[type=number], select { width: 100%; height: 42px; padding: 0 11px; border: 1px solid var(--bordo); border-radius: 10px; background: #fff; font: 13.5px/1 var(--mono); color: var(--inchiostro); }
+  input:focus, select:focus { outline: 2px solid var(--verde-vivo); outline-offset: 1px; }
+  .campi { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .campi .larga { grid-column: 1 / -1; }
+  button.salva { height: 42px; padding: 0 18px; border: none; border-radius: 10px; background: var(--verde); color: #fff; font: 700 13px/1 inherit; font-family: inherit; cursor: pointer; }
+  button.salva:hover { background: #0b573b; }
+  .esito { font-size: 13px; margin-top: 10px; min-height: 19px; color: var(--tenue); }
+  .esito.male { color: var(--rosso); font-weight: 600; }
+  .esito.bene { color: var(--verde); font-weight: 600; }
+
+  .diagnostica { margin-top: 18px; background: var(--scheda); border: 1px solid var(--bordo); border-radius: 16px; padding: 14px 19px; }
+  .diagnostica p { margin: 6px 0 0; font: 12px/1.5 var(--mono); color: #3b463f; word-break: break-word; }
+
+  .registro { margin-top: 18px; background: #0d211a; border: 1px solid #0a1b15; border-radius: 16px; overflow: hidden; }
+  .barra-log { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px 18px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .barra-log h2 { margin: 0; font-size: 14px; font-weight: 700; color: #eaf5ee; }
+  .barra-log label { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: rgba(234,245,238,.72); }
+  .legenda { margin-left: auto; display: flex; gap: 11px; font: 11px/1 var(--mono); }
+  .legenda span { display: flex; align-items: center; gap: 6px; }
+  .legenda i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  #log { height: 320px; overflow-y: auto; padding: 12px 18px 16px; font: 12.5px/1.7 var(--mono); color: #cfe0d6; white-space: pre-wrap; word-break: break-word; }
+  #log .r { display: block; }
+  #log .chi { color: #5f7a6b; }
+  #log .rete .chi { color: #7fb2ff; } #log .gba .chi { color: #7fd7a0; } #log .mb .chi { color: #ffcc70; }
+  #log .usb .chi { color: #ff9a9a; } #log .stato .chi { color: #d8a0ff; } #log .club .chi { color: #d8a0ff; }
+  #log .err { color: #ff8f8f; font-weight: 700; }
+  footer { text-align: center; color: var(--tenue2); font-size: 12.5px; padding: 16px 0 30px; }
+  footer a { color: var(--verde); }
+  /* ============================================================= MOBILE ====
+   * Il pannello nasce per il monitor: su telefono le tre schede di stato, le
+   * due colonne e la riga degli attrezzi diventano una colonna sola, i
+   * bersagli crescono fino a 44 px (sotto, col dito si sbaglia), e il
+   * registro smette di prendersi mezzo schermo. */
+  @media (max-width: 900px) {
+    .stato { grid-template-columns: 1fr; }
+    .due { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 640px) {
+    header { padding: 14px 0 15px; }
+    header .dentro { padding: 0 14px; gap: 12px; }
+    header h1 { font-size: 20px; }
+    header .sub { font-size: 12px; }
+    /* le targhe vanno a capo sotto il marchio invece di stringere il titolo */
+    .targhe { margin-left: 0; width: 100%; order: 3; }
+    .targa { flex: 1 1 100%; max-width: none; }
+
+    main { margin: 14px auto 26px; padding: 0 14px; }
+    .scheda { padding: 14px 15px; border-radius: 14px; }
+    .pannello { padding: 16px 15px 18px; border-radius: 14px; }
+    .cifra b { font-size: 27px; }
+
+    /* la spia in alto a destra finirebbe sopra il testo: va sotto */
+    .spia { position: static; margin-top: 9px; }
+
+    /* i passi: numero sopra, bottone a tutta larghezza sotto */
+    button.azione { flex-wrap: wrap; gap: 10px 12px; padding: 12px 13px; }
+    button.azione .testo { flex: 1 1 auto; }
+    button.azione .fine { margin-left: 0; flex: 1 1 100%; height: 44px; }
+
+    /* attrezzi e campi: uno per riga, alti abbastanza per un dito */
+    .attrezzi { flex-direction: column; }
+    button.minore, a.minore, .attrezzi label.minore { width: 100%; height: 44px; line-height: 44px; text-align: center; }
+    .campi { grid-template-columns: 1fr; }
+    input[type=text], input[type=number], select { height: 46px; font-size: 16px; }
+    /* 16px NON e' un capriccio: sotto i 16 px iOS ingrandisce la pagina da
+     * solo quando il campo prende il fuoco, e non la rimpicciolisce piu'. */
+    button.salva { width: 100%; height: 46px; }
+
+    /* le caselle di spunta a 13 px si sbagliano col dito: si ingrandiscono
+     * loro e la riga che le contiene, cosi' il bersaglio vero e' l'etichetta */
+    .barra-log label, .attrezzi label { min-height: 40px; }
+    input[type=checkbox] { width: 20px; height: 20px; }
+
+    #log { height: 42vh; font-size: 12px; padding: 10px 13px 13px; }
+    .barra-log { padding: 10px 13px; gap: 10px; }
+    .legenda { margin-left: 0; width: 100%; flex-wrap: wrap; gap: 8px; }
+    #riga-club { flex-wrap: wrap; }
+    #riga-club .pillola { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="erba"></div>
+  <div class="velo"></div>
+  <div class="dentro">
+    <div class="marchio" id="marchio">
+      <div class="fondo"></div>
+      <img class="px o1" src="img/orma-treecko-scuro-bordo.png" alt="">
+      <img class="px o2" src="img/orma-torchic-scuro-bordo.png" alt="">
+    </div>
+    <div>
+      <h1>gen3-poke-multiplayer</h1>
+      <p class="sub" id="sottotitolo">Camminate insieme in Pokémon Smeraldo, su GBA vero — dal browser.</p>
+    </div>
+    <div class="targhe">
+      <span id="lingua-slot" style="color:#eaf5ee"></span>
+      <span class="targa" title="il relay"><span class="led" id="led-relay"></span><span id="targa-relay">relay: non collegato</span></span>
+      <span class="targa" title="il Pico (adattatore USB)"><span class="led" id="led-pico"></span><span id="targa-pico">Pico: non collegato</span></span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="avviso" hidden><span class="bang">!</span><span id="avviso-testo"></span></div>
+
+  <section class="stato">
+    <div class="scheda presenza">
+      <p class="etichetta">Il tuo GBA</p>
+      <p class="grosso" id="st-gba">Fermo</p>
+      <p class="riga-mono" id="st-mappa">programma non caricato</p>
+      <span class="spia" id="spia-gba"><i></i><em id="spia-gba-testo" style="font-style:normal">in attesa</em></span>
+    </div>
+    <div class="scheda presenza">
+      <p class="etichetta">Gli amici</p>
+      <p class="grosso" id="st-amico">In attesa</p>
+      <p class="riga-mono" id="st-stanza">stanza —</p>
+      <ul class="amici" id="lista-amici"></ul>
+      <span class="spia" id="spia-amico"><i></i><em id="spia-amico-testo" style="font-style:normal">in attesa</em></span>
+    </div>
+    <div class="scheda canale">
+      <p class="etichetta">Canale</p>
+      <div class="cifra"><b id="st-parole">—</b><span>parole/s sul cavo</span></div>
+      <div class="conti">
+        <div><small>Inviati</small><b id="st-inviati">0</b></div>
+        <div><small>Ricevuti</small><b id="st-ricevuti">0</b></div>
+        <div><small>RTT</small><b id="st-rtt">—</b></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="due">
+    <section class="pannello">
+      <h2>Partita</h2>
+      <p class="aiuto">In ordine: collega il Pico, poi <b>slot cartuccia vuoto</b>, cavo, accendi il GBA e carica il gioco;
+        schermo rosso ➜ inserisci la cartuccia a caldo ➜ verde ➜ gioca. Infine premi Gioca quando sei all'aperto.</p>
+      <div class="passi">
+        <div id="riga-pico"></div>
+        <div id="riga-multiboot"></div>
+        <div id="riga-gioca"></div>
+      </div>
+      <div class="esito" id="esito-azione"></div>
+
+      <div class="separa"></div>
+      <p class="etichetta" style="margin-bottom:10px">Attrezzi</p>
+      <div class="attrezzi">
+        <button class="minore" id="btn-mappa">Mappa live ↗</button>
+        <button class="minore" id="btn-spettatore">Guarda soltanto (spettatore)</button>
+        <button class="minore" id="btn-lua" title="Scarica lo script gia' configurato con la stanza qui sopra: si carica in mGBA e basta">Scarica lo script per l'emulatore ↓</button>
+        <button class="minore" id="btn-riavvia" disabled>Riavvia il Pico (F-4)</button>
+        <button class="minore" id="btn-scollega" disabled>Scollega il Pico</button>
+        <label class="minore" style="cursor:pointer;padding:0 12px">.gba diverso: <input type="file" id="mb-file" accept=".gba" style="width:190px;font-size:12px"></label>
+        <button class="minore" id="btn-copia">Copia tutto il registro</button>
+        <button class="minore" id="btn-scarica" title="Salva un file .log con TUTTE le righe della sessione, anche quelle uscite dallo schermo">Scarica il log completo</button>
+        <button class="minore" id="btn-pulisci" title="Sgombra solo lo schermo: copia e download restituiscono comunque tutta la sessione">Pulisci il log</button>
+      </div>
+      <p class="aiuto" style="margin:12px 0 0">La <b>Mappa live</b> mostra Hoenn con te e gli amici dal vivo: si apre in una scheda a parte
+        e prende le posizioni da questa pagina, quindi tienile aperte tutte e due.
+        <b>Guarda soltanto</b> serve a chi non ha il GBA sottomano (o usa Firefox, dove WebUSB non esiste): ti colleghi
+        al relay e vedi gli altri muoversi, senza mandare niente — e <b>senza occupare uno dei 4 posti</b> della stanza,
+        quindi si può guardare anche a partita piena. Se stai giocando altrove (per esempio dentro mGBA), scrivi il
+        numero di peer di quel client fra le Impostazioni: sulla mappa ti ritrovi come <b>«tu»</b>, in azzurro.</p>
+      <p class="aiuto" style="margin:8px 0 0"><b>Giochi dentro mGBA?</b> Premi <b>Scarica lo script per l'emulatore</b>:
+        ti viene giù un file <code>.lua</code> già scritto con la stanza qui sopra — lo carichi in mGBA
+        (<i>Tools → Scripting → Load script</i>) e giochi, senza modificare niente a mano. Il numero di peer se lo
+        sorteggia da solo. Per cambiare stanza dopo: riscarica, oppure scrivi <code>stanza(58243)</code> nella
+        console di mGBA.</p>
+      <p class="aiuto" style="margin:8px 0 0">Il <b>Cable Club</b> (scambi e lotte) funziona anche da qui: sedetevi al bancone
+        della saletta in due, e il resto parte da solo — il registro dice «passo il Pico in modo LINK». Durante lo scambio
+        <b>tieni questa scheda in primo piano</b> (in background il browser rallenta i timer). Serve il Pico collegato:
+        da spettatore, o dentro mGBA, il club non c'è.</p>
+    </section>
+
+    <section class="pannello">
+      <h2>Impostazioni</h2>
+      <p class="aiuto">Devono combaciare con i tuoi amici: <b>stesso relay</b> e <b>stessa stanza</b>. Nessuno ospita niente:
+        il relay sta su un server e ognuno si collega.</p>
+      <div class="campi">
+        <label class="campo larga"><span>Relay (wss://host/ws, oppure host:porta)</span>
+          <input type="text" id="relay" spellcheck="false" placeholder="wss://relay.esempio.it/ws">
+          <small class="guida">L'indirizzo del server che smista i pacchetti fra i giocatori.
+            Se apri questa pagina dal sito ufficiale è già compilato: non toccarlo.
+            «Prova il relay» qui sotto ti dice subito se è raggiungibile e in quanti millisecondi.</small></label>
+        <label class="campo"><span>Stanza (stesso numero per tutti)</span>
+          <input type="number" id="stanza" min="1" max="65535">
+          <small class="guida">La «partita»: si vedono solo i giocatori con lo stesso numero.
+            Scegline uno qualsiasi fra 1 e 65535 e passalo agli amici. Non è una password:
+            chi lo conosce entra.</small></label>
+        <label class="campo"><span>Il tuo numero (peer)</span>
+          <input type="number" id="peer" min="1" max="65534">
+          <small class="guida">Il tuo identificativo dentro la stanza: <b>deve essere diverso
+            da quello di ogni amico</b>, altrimenti i pacchetti si confondono. La pagina ne ha
+            sorteggiato uno a caso per te: in genere va bene così.</small></label>
+        <label class="campo"><span>Il tuo numero di gioco (solo da spettatore)</span>
+          <input type="number" id="peer-gioco" min="1" max="65534" placeholder="vuoto = nessuno">
+          <small class="guida">Se stai <b>giocando altrove</b> — dentro mGBA, o col GBA collegato a
+            un altro computer — scrivi qui il numero di peer di quel client: sulla Mappa live
+            diventi il <b>pallino azzurro «tu»</b> invece di un amico qualunque. Dev'essere diverso
+            dal numero qui sopra. Lascia vuoto se guardi soltanto.</small></label>
+        <label class="campo"><span>Velocità canale (timing PIO)</span>
+          <input type="number" id="timing" min="1000" max="60000" step="100">
+          <small class="guida">Il periodo (in cicli) con cui l'adattatore scandisce il cavo verso
+            il GBA. <b>7400</b> è il valore misurato che funziona: alzalo solo se il registro
+            mostra tanti «desync», abbassalo solo se sai cosa stai facendo.</small></label>
+        <label class="campo"><span>Cavo</span>
+          <select id="cavo">
+            <option value="auto">automatico</option>
+            <option value="gba">GBA (SD su GP3)</option>
+            <option value="gbc">GBC (SD su GP4)</option>
+          </select>
+          <small class="guida">Su quale piedino del Pico arriva il segnale SD: dipende da come è
+            saldato il tuo adattatore. <b>Automatico</b> prova da solo e di norma indovina;
+            forzalo solo se il canale resta muto con il cavo giusto attaccato.</small></label>
+      </div>
+      <p class="aiuto" style="margin-top:10px">Prima volta su Windows? Il Pico ha bisogno del driver
+        <b>WinUSB</b> (si installa una volta sola con <b>Zadig</b>: seleziona il device 2FE3:000A e
+        premi «Install driver»). Senza driver il browser vede il Pico ma non riesce ad aprirlo.</p>
+      <div style="margin-top:16px;display:flex;gap:9px;flex-wrap:wrap">
+        <button class="salva" id="btn-salva">Salva impostazioni</button>
+        <button class="minore" id="btn-prova-relay" title="Apre la connessione, manda un PING, misura il tempo e chiude">Prova il relay</button>
+      </div>
+      <div class="esito" id="esito-config"></div>
+    </section>
+  </div>
+
+  <section class="diagnostica">
+    <p class="etichetta">Diagnostica (quello che il GBA dice di sé)</p>
+    <p id="st-stats">—</p>
+    <p id="st-sonda">sonda: nessuna ancora (il payload la manda una volta al secondo, anche dal titolo)</p>
+    <p id="st-diag"></p>
+  </section>
+
+  <section class="registro">
+    <div class="barra-log">
+      <h2>Registro</h2>
+      <label><input type="checkbox" id="autoscroll" checked> Segui le novità</label>
+      <label><input type="checkbox" id="mostra-eventi"> Eventi del gioco</label>
+      <label><input type="checkbox" id="mostra-sonda"> Sonda</label>
+      <div class="legenda">
+        <span style="color:#7fb2ff"><i></i>rete</span>
+        <span style="color:#7fd7a0"><i></i>gba</span>
+        <span style="color:#ffcc70"><i></i>multiboot</span>
+        <span style="color:#ff9a9a"><i></i>usb</span>
+        <span style="color:#d8a0ff"><i></i>stato</span>
+      </div>
+    </div>
+    <div id="log"></div>
+  </section>
+
+  <footer><a href="index.html">‹ Pagina iniziale</a> · gen3-poke-multiplayer nel browser · <a href="progetto.html"><b>Come funziona il progetto, e i crediti</b></a>
+    — costruito sul lavoro di Celio, pret (pokeemerald), mGBA, GBATEK e altri: <a href="progetto.html">l'elenco completo</a>
+    · autotest: <a href="test.html">sio</a> · <a href="mb_test.html">multiboot</a> · <a href="bridge_test.html">bridge</a></footer>
+</main>
+
+<script src="config.js"></script>
+<script src="js/sio.js"></script>
+<script src="js/device.js"></script>
+<script src="js/multiboot.js"></script>
+<script src="js/relay.js"></script>
+<script src="js/club.js"></script>
+<script src="js/bridge.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

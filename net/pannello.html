@@ -1,0 +1,675 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>gen3-poke-multiplayer — Pannello</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="img/favicon.png">
+<!--
+  La pagina del pannello (pannello.py la serve su 127.0.0.1).
+
+  NIENTE RISORSE ESTERNE: niente CDN, niente Google Fonts, niente sprite
+  remoti. Le immagini stanno in net/img/ e sono i pixel della decomp
+  (graphics/pokemon/<specie>/footprint.png + data/tilesets/primary/general/
+  tiles.png ricolorato con la sua palette 02.pal), quindi il pannello
+  funziona anche a PC offline - cioe' proprio mentre si gioca in locale.
+-->
+<style>
+  :root {
+    --verde-cupo: #0f3428;
+    --verde: #0f6b4a;
+    --verde-vivo: #16a06e;
+    --verde-chiaro: #3fd68f;
+    --carta: #f2ede1;
+    --scheda: #fffdf7;
+    --bordo: #dfd7c4;
+    --bordo-scuro: #cbc3b0;
+    --inchiostro: #16211c;
+    --tenue: #6b7269;
+    --tenue2: #8b9189;
+    --ambra: #c07a12;
+    --rosso: #b3392f;
+    --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 15px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    color: var(--inchiostro);
+    background: var(--carta);
+  }
+  img.px { image-rendering: pixelated; }
+
+  /* ---------------------------------------------------------- testa */
+  header {
+    position: relative;
+    overflow: hidden;
+    background: var(--verde-cupo);
+    color: #eaf5ee;
+    padding: 20px 0 22px;
+  }
+  header .erba, header .velo { position: absolute; inset: 0; }
+  header .erba {
+    background: url(img/tile-erba-alta.png) 0 0/96px 96px repeat;
+    image-rendering: pixelated;
+    opacity: .9;
+  }
+  header .velo {
+    background: linear-gradient(100deg, rgba(8,26,20,.92) 0%, rgba(8,26,20,.78) 55%, rgba(8,26,20,.52) 100%);
+  }
+  header .dentro {
+    position: relative;
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .marchio {
+    position: relative;
+    width: 56px; height: 56px; flex: none;
+    border-radius: 13px;
+    overflow: hidden;
+    border: 2px solid #08211a;
+    box-shadow: 0 6px 16px rgba(0,0,0,.35);
+  }
+  .marchio .fondo {
+    position: absolute; inset: 0;
+    background: url(img/tile-erba-alta.png) 0 0/30px 30px repeat;
+    image-rendering: pixelated;
+  }
+  .marchio .o1 { position: absolute; left: 5px; bottom: 5px; width: 25px; height: 25px; }
+  .marchio .o2 { position: absolute; right: 4px; top: 4px; width: 22px; height: 22px; }
+  header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+  header .sub { margin: 3px 0 0; font-size: 13px; color: rgba(234,245,238,.74); }
+  .targhe { margin-left: auto; display: flex; gap: 9px; flex-wrap: wrap; }
+  .targa {
+    display: flex; align-items: center; gap: 8px;
+    height: 32px; padding: 0 12px; border-radius: 9px;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16);
+    font: 12px/1 var(--mono); color: #bfe2cd;
+  }
+  .targa .led { width: 7px; height: 7px; border-radius: 50%; background: var(--verde-chiaro); }
+
+  main { max-width: 1160px; margin: 22px auto 40px; padding: 0 24px; }
+
+  /* -------------------------------------------------------- avviso */
+  [hidden] { display: none !important; }
+  #avviso {
+    display: flex; gap: 13px; align-items: flex-start;
+    background: #fdf4dd; border: 1px solid #e8ce8f; border-left: 5px solid var(--ambra);
+    border-radius: 12px; padding: 13px 17px; margin-bottom: 18px; font-size: 14px;
+  }
+  #avviso .bang {
+    display: grid; place-items: center; width: 24px; height: 24px; flex: none;
+    border-radius: 50%; background: var(--ambra); color: #fff; font-weight: 800; font-size: 14px;
+  }
+
+  /* --------------------------------------------------------- stato */
+  .stato { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .scheda {
+    background: var(--scheda); border: 1px solid var(--bordo);
+    border-radius: 16px; padding: 17px 19px;
+    box-shadow: 0 1px 2px rgba(20,30,24,.05);
+  }
+  .etichetta {
+    margin: 0; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .14em; color: var(--tenue2);
+  }
+  .scheda.presenza { position: relative; }
+  .grosso { margin: 11px 0 0; font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
+  .riga-mono { margin: 4px 0 0; font: 12.5px/1.4 var(--mono); color: #5f6b62; }
+  .spia {
+    position: absolute; top: 16px; right: 18px;
+    display: flex; align-items: center; gap: 7px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--tenue2);
+  }
+  .spia i { width: 8px; height: 8px; border-radius: 50%; background: #c3c3cc; }
+  .spia.ok { color: var(--verde); } .spia.ok i { background: var(--verde-vivo); }
+  .spia.no { color: var(--rosso); } .spia.no i { background: var(--rosso); }
+
+  .scheda.canale { background: var(--verde-cupo); border-color: #0b2a20; color: #dcefe3; }
+  .scheda.canale .etichetta { color: rgba(220,239,227,.6); }
+  .cifra { display: flex; align-items: baseline; gap: 8px; margin-top: 11px; }
+  .cifra b { font: 700 32px/1 var(--mono); letter-spacing: -.02em; }
+  .cifra span { font: 12.5px/1 var(--mono); color: rgba(220,239,227,.65); }
+  .conti { display: flex; gap: 8px; margin-top: 13px; }
+  .conti div { flex: 1; border-radius: 9px; background: rgba(255,255,255,.07); padding: 7px 10px; }
+  .conti small {
+    display: block; font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .12em; color: rgba(220,239,227,.55);
+  }
+  .conti b { display: block; margin-top: 4px; font: 700 15px/1 var(--mono); }
+
+  #riga-club {
+    display: flex; align-items: center; gap: 16px; margin-top: 14px;
+    background: var(--scheda); border: 1px solid var(--bordo);
+    border-left: 5px solid var(--verde); border-radius: 14px; padding: 13px 19px;
+  }
+  #riga-club .titolo { margin: 0; font-size: 15px; font-weight: 700; }
+  #riga-club .sotto { margin: 3px 0 0; font: 12px/1.4 var(--mono); color: #5f6b62; }
+  .pillola {
+    margin-left: auto; display: flex; align-items: center; gap: 8px;
+    height: 30px; padding: 0 13px; border-radius: 999px;
+    background: #e6f4ec; border: 1px solid #b9dfc9;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--verde);
+  }
+
+  /* ------------------------------------------------- due colonne */
+  .due { display: grid; grid-template-columns: minmax(0,1.32fr) minmax(0,1fr); gap: 18px; align-items: start; margin-top: 18px; }
+  .pannello { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 16px; padding: 20px 22px 22px; box-shadow: 0 1px 2px rgba(20,30,24,.05); }
+  .pannello h2 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+  .pannello p.aiuto { margin: 6px 0 16px; font-size: 13px; line-height: 1.55; color: var(--tenue); }
+
+  .passi { display: flex; flex-direction: column; gap: 10px; }
+  button.azione {
+    display: flex; align-items: center; gap: 15px; width: 100%; text-align: left;
+    border: 1px solid #e3dbc9; background: var(--scheda); border-radius: 13px;
+    padding: 13px 15px; font: inherit; cursor: pointer;
+  }
+  button.azione:hover:not(:disabled) { border-color: var(--bordo-scuro); background: #fffaf0; }
+  button.azione:disabled { cursor: not-allowed; opacity: .55; }
+  button.azione .num {
+    display: grid; place-items: center; width: 34px; height: 34px; flex: none;
+    border-radius: 10px; background: #e9e2d0; color: #5f6b62; font: 700 15px/1 var(--mono);
+  }
+  button.azione .testo { min-width: 0; }
+  button.azione .testo b { display: block; font-size: 15px; font-weight: 700; }
+  button.azione .testo small { display: block; margin-top: 3px; font-size: 12.5px; color: var(--tenue); }
+  button.azione .fine {
+    margin-left: auto; flex: none; display: grid; place-items: center;
+    height: 38px; padding: 0 16px; border-radius: 10px;
+    border: 1px solid var(--bordo-scuro); background: #fff;
+    font-size: 13px; font-weight: 700; color: #3b463f;
+  }
+  button.azione.viva { border-color: #cfe3d6; background: #f3faf5; }
+  button.azione.viva .num { background: var(--verde); color: #fff; }
+  button.azione.viva .fine { background: var(--inchiostro); border-color: var(--inchiostro); color: #fff; }
+
+  .separa { height: 1px; background: #e6dfcd; margin: 18px 0 14px; }
+  .attrezzi { display: flex; flex-wrap: wrap; gap: 9px; }
+  button.minore {
+    height: 38px; padding: 0 15px; border: 1px solid var(--bordo-scuro);
+    border-radius: 10px; background: #fff; color: #3b463f;
+    font: 600 13px/1 inherit; font-family: inherit; cursor: pointer;
+  }
+  button.minore:hover { background: #f5f0e3; }
+
+  label.campo { display: block; }
+  label.campo > span {
+    display: block; font-size: 11.5px; font-weight: 600; color: #3b463f; margin-bottom: 6px;
+  }
+  label.campo > small.guida {
+    display: block; margin-top: 5px; font-size: 11.5px; line-height: 1.5; color: var(--tenue);
+  }
+  input[type=text], input[type=number], select {
+    width: 100%; height: 42px; padding: 0 11px;
+    border: 1px solid var(--bordo); border-radius: 10px; background: #fff;
+    font: 13.5px/1 var(--mono); color: var(--inchiostro);
+  }
+  input:focus, select:focus { outline: 2px solid var(--verde-vivo); outline-offset: 1px; }
+  .campi { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .campi .larga { grid-column: 1 / -1; }
+  .scelta { display: flex; gap: 8px; margin-bottom: 16px; }
+  .scelta button {
+    flex: 1; height: 44px; border-radius: 11px; cursor: pointer;
+    border: 2px solid var(--bordo); background: #fff; color: #5f6b62;
+    font: 600 13px/1 inherit; font-family: inherit;
+  }
+  .scelta button.on { border-color: var(--verde); background: #e9f5ee; color: #0b4d36; font-weight: 700; }
+  button.salva {
+    height: 42px; padding: 0 18px; border: none; border-radius: 10px;
+    background: var(--verde); color: #fff; font: 700 13px/1 inherit; font-family: inherit; cursor: pointer;
+  }
+  button.salva:hover { background: #0b573b; }
+
+  .esito { font-size: 13px; margin-top: 10px; min-height: 19px; color: var(--tenue); }
+  .esito.male { color: var(--rosso); font-weight: 600; }
+
+  /* ------------------------------------------------------ registro */
+  .registro { margin-top: 18px; background: #0d211a; border: 1px solid #0a1b15; border-radius: 16px; overflow: hidden; }
+  .barra-log {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 12px 18px; border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .barra-log h2 { margin: 0; font-size: 14px; font-weight: 700; color: #eaf5ee; }
+  .barra-log label { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: rgba(234,245,238,.72); }
+  .legenda { margin-left: auto; display: flex; gap: 11px; font: 11px/1 var(--mono); }
+  .legenda span { display: flex; align-items: center; gap: 6px; }
+  .legenda i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  #log {
+    height: 320px; overflow-y: auto; padding: 12px 18px 16px;
+    font: 12.5px/1.7 var(--mono); color: #cfe0d6;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  #log .r { display: block; }
+  #log .chi { color: #5f7a6b; }
+  #log .relay .chi { color: #7fb2ff; }
+  #log .gioca .chi { color: #7fd7a0; }
+  #log .multiboot .chi { color: #ffcc70; }
+  #log .sblocca .chi { color: #ff9a9a; }
+  #log .finto .chi { color: #d8a0ff; }
+  #log .grave { color: #ff8f8f; font-weight: 700; }
+
+  footer { text-align: center; color: var(--tenue2); font-size: 12.5px; padding: 16px 0 30px; }
+
+  @media (max-width: 900px) {
+    .stato { grid-template-columns: 1fr; }
+    .due { grid-template-columns: 1fr; }
+  }
+</style>
+
+<header>
+  <div class="erba"></div>
+  <div class="velo"></div>
+  <div class="dentro">
+    <div class="marchio" id="marchio">
+      <div class="fondo"></div>
+      <img class="px o1" src="img/orma-treecko-scuro-bordo.png" alt="">
+      <img class="px o2" src="img/orma-torchic-scuro-bordo.png" alt="">
+    </div>
+    <div>
+      <h1>gen3-poke-multiplayer</h1>
+      <p class="sub" id="sottotitolo">Camminate insieme in Pokémon Smeraldo, su GBA vero.</p>
+    </div>
+    <div class="targhe">
+      <span class="targa"><span class="led"></span>127.0.0.1:7411</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="avviso" hidden><span class="bang">!</span><span id="avviso-testo"></span></div>
+
+  <section class="stato">
+    <div class="scheda presenza">
+      <p class="etichetta">Il tuo GBA</p>
+      <p class="grosso" id="st-gba">Fermo</p>
+      <p class="riga-mono" id="st-mappa">programma non caricato</p>
+      <span class="spia" id="spia-gba"><i></i><em id="spia-gba-testo" style="font-style:normal">in attesa</em></span>
+    </div>
+
+    <div class="scheda presenza">
+      <p class="etichetta">L'amico</p>
+      <p class="grosso" id="st-amico">In attesa</p>
+      <p class="riga-mono" id="st-stanza">stanza —</p>
+      <span class="spia" id="spia-amico"><i></i><em id="spia-amico-testo" style="font-style:normal">in attesa</em></span>
+    </div>
+
+    <div class="scheda canale">
+      <p class="etichetta">Canale</p>
+      <div class="cifra"><b id="st-parole">—</b><span>parole/s</span></div>
+      <div class="conti">
+        <div><small>Inviati</small><b id="st-inviati">0</b></div>
+        <div><small>Ricevuti</small><b id="st-ricevuti">0</b></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="riga-club" hidden>
+    <div>
+      <p class="titolo" id="club-titolo">Cable Club</p>
+      <p class="sotto" id="club-sotto">sessione in corso</p>
+    </div>
+    <span class="pillola"><span style="width:7px;height:7px;border-radius:50%;background:#16a06e"></span>scambi e lotte</span>
+  </div>
+
+  <div class="due">
+    <section class="pannello">
+      <h2>Partita</h2>
+      <p class="aiuto">Prima di premere: <b>slot cartuccia vuoto</b>, cavo collegato, poi accendi il GBA.
+        Dopo il caricamento inserisci la cartuccia a caldo.</p>
+      <div class="passi">
+        <div id="riga-relay"></div>
+        <div id="riga-multiboot"></div>
+        <div id="riga-gioca"></div>
+      </div>
+      <div class="esito" id="esito-azione"></div>
+
+      <div class="separa"></div>
+      <p class="etichetta" style="margin-bottom:10px">Attrezzi</p>
+      <div class="attrezzi">
+        <button class="minore" onclick="avvia('sblocca')">Sblocca adattatore</button>
+        <button class="minore" id="btn-finto" onclick="toggleFinto()">Prova da solo (partner finto)</button>
+        <a class="minore" href="/mappa.html" target="_blank" style="display:inline-block;background:#30363d;color:#fff;border-radius:6px;padding:8px 14px;text-decoration:none;font-size:15px">Mappa live ↗</a>
+        <button class="minore" onclick="copiaLog(this)">Copia tutto il registro</button>
+        <a class="minore" href="/api/log?scarica=1" style="display:inline-block;background:#30363d;color:#fff;border-radius:6px;padding:8px 14px;text-decoration:none;font-size:15px">Scarica il log completo</a>
+        <button class="minore" onclick="pulisciLog()">Pulisci il log</button>
+      </div>
+      <p class="aiuto" style="margin:12px 0 0">Il <b>partner finto</b> recita l'amico per provare il Cable Club
+        da soli: accendilo insieme alla partita, poi col GBA vai dalla signorina degli <b>scambi</b>.
+        Vittoria = «LINKUP COMPLETO» nel registro e il GBA che entra nella saletta.</p>
+    </section>
+
+    <section class="pannello">
+      <h2>Impostazioni</h2>
+      <p class="aiuto">Devono combaciare fra te e il tuo amico: <b>stessa stanza</b> e lo stesso relay.
+        Chi ospita apre la porta sul router.</p>
+
+      <p style="margin:0 0 7px;font-size:11.5px;font-weight:600;color:#3b463f">Chi sei in questa partita</p>
+      <div class="scelta">
+        <button id="r-ospite" onclick="setRuolo('ospite')">Ospito io il relay</button>
+        <button id="r-amico" onclick="setRuolo('amico')">Mi collego a un amico</button>
+      </div>
+
+      <div class="campi">
+        <label class="campo larga"><span>Relay (host:porta)</span>
+          <input type="text" id="relay" spellcheck="false" placeholder="93.42.10.20:9000">
+          <small class="guida">L'indirizzo del server che smista i pacchetti. Se ospiti tu,
+            diventa da solo <b>127.0.0.1:porta</b>; se ti colleghi, scrivi quello che ti passa
+            chi ospita (o del server pubblico).</small></label>
+        <label class="campo"><span>Stanza (stesso numero per tutti)</span>
+          <input type="number" id="stanza" min="1" max="65535">
+          <small class="guida">La «partita»: si vedono solo i giocatori con lo stesso numero.
+            Un numero qualsiasi fra 1 e 65535, uguale per tutti gli amici.</small></label>
+        <label class="campo"><span>Velocità canale (timing)</span>
+          <input type="number" id="timing" min="1000" max="60000" step="100">
+          <small class="guida">Il periodo con cui l'adattatore scandisce il cavo verso il GBA.
+            <b>7400</b> è il valore misurato che funziona: non toccarlo se il canale va.</small></label>
+        <label class="campo"><span>Il tuo numero (peer)</span>
+          <input type="number" id="peer" min="0" max="65534" placeholder="auto">
+          <small class="guida"><b>0 = automatico</b> (ospite→1, amico→2): va bene in due.
+            <b>In tre o più</b> — anche mischiando GBA, emulatori e browser nella stessa
+            stanza — ognuno deve avere un numero DIVERSO: scrivilo qui.</small></label>
+        <label class="campo larga"><span>Cavo</span>
+          <select id="cavo">
+            <option value="auto">automatico</option>
+            <option value="gba">GBA (SD su GP3)</option>
+            <option value="gbc">GBC (SD su GP4)</option>
+          </select>
+          <small class="guida">Su quale piedino del Pico arriva il segnale SD: dipende dalla
+            saldatura del tuo adattatore. <b>Automatico</b> di norma indovina da solo.</small></label>
+      </div>
+      <p class="aiuto" style="margin:12px 0 0">GBA veri, emulatori mGBA e browser giocano
+        <b>insieme</b>: basta stesso relay, stessa stanza e numeri di peer tutti diversi.
+        Per l'emulatore si usa il pacchetto emulatore (o <code>net\run-local.ps1</code>).</p>
+
+      <div style="margin-top:16px"><button class="salva" onclick="salva()">Salva impostazioni</button></div>
+      <div class="esito" id="esito-config"></div>
+    </section>
+  </div>
+
+  <section class="registro">
+    <div class="barra-log">
+      <h2>Registro</h2>
+      <label><input type="checkbox" id="autoscroll" checked> Segui le novità</label>
+      <label><input type="checkbox" id="solo-gioca"> Solo la partita</label>
+      <div class="legenda">
+        <span style="color:#7fb2ff"><i></i>relay</span>
+        <span style="color:#7fd7a0"><i></i>gioca</span>
+        <span style="color:#ffcc70"><i></i>multiboot</span>
+        <span style="color:#ff9a9a"><i></i>sblocca</span>
+        <span style="color:#d8a0ff"><i></i>finto</span>
+      </div>
+    </div>
+    <div id="log"></div>
+  </section>
+
+  <footer>Il pannello lancia gli stessi programmi dei vecchi .bat — se qualcosa
+    va storto, quelli restano lì e funzionano.</footer>
+</main>
+
+<script>
+"use strict";
+
+let ultimoSeq = 0;
+let config = null;
+let processi = {};
+let configSporca = false;   // l'utente sta scrivendo: non sovrascrivere i campi
+
+const $ = (id) => document.getElementById(id);
+
+// --- comunicazione col pannello -------------------------------------------
+
+async function post(rotta, corpo) {
+  const r = await fetch(rotta, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(corpo || {})
+  });
+  return r.json();
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/api/tick?da=" + ultimoSeq);
+    const s = await r.json();
+    ultimoSeq = s.seq;
+    processi = s.processi;
+    if (!configSporca) applicaConfig(s.config);
+    config = s.config;
+    disegnaStato(s.sintesi);
+    disegnaPassi();
+    aggiungiRighe(s.righe);
+    $("sottotitolo").textContent =
+      "Camminate insieme in Pokémon Smeraldo, su GBA vero.";
+  } catch (e) {
+    $("sottotitolo").textContent =
+      "Pannello non raggiungibile: la finestra nera è stata chiusa?";
+  }
+}
+
+// --- impostazioni ----------------------------------------------------------
+
+function applicaConfig(c) {
+  $("relay").value = c.relay;
+  $("stanza").value = c.stanza;
+  $("timing").value = c.timing;
+  $("peer").value = c.peer || "";   // 0/assente = automatico dal ruolo
+  $("cavo").value = c.cavo;
+  $("r-ospite").classList.toggle("on", c.ruolo === "ospite");
+  $("r-amico").classList.toggle("on", c.ruolo === "amico");
+}
+
+function setRuolo(r) {
+  $("r-ospite").classList.toggle("on", r === "ospite");
+  $("r-amico").classList.toggle("on", r === "amico");
+  if (r === "ospite" && !/^127\.0\.0\.1:/.test($("relay").value)) {
+    // Chi ospita fa girare il relay sul suo PC: il client parla in locale.
+    $("relay").value = "127.0.0.1:" + ($("relay").value.split(":")[1] || "9000");
+  }
+  configSporca = true;
+  salva();
+}
+
+async function salva() {
+  const r = await post("/api/config", {
+    ruolo: $("r-ospite").classList.contains("on") ? "ospite" : "amico",
+    relay: $("relay").value.trim(),
+    stanza: parseInt($("stanza").value, 10),
+    timing: parseInt($("timing").value, 10),
+    peer: parseInt($("peer").value, 10) || 0,
+    cavo: $("cavo").value
+  });
+  const e = $("esito-config");
+  e.textContent = r.ok ? "Impostazioni salvate." : r.messaggio;
+  e.className = "esito" + (r.ok ? "" : " male");
+  if (r.ok) { configSporca = false; applicaConfig(r.config); }
+  setTimeout(() => { if (r.ok) e.textContent = ""; }, 3000);
+}
+
+["relay", "stanza", "timing", "peer", "cavo"].forEach(id =>
+  $(id).addEventListener("input", () => { configSporca = true; }));
+
+// --- i pulsanti ------------------------------------------------------------
+
+function bottone(cosa, numero, titolo, sotto, sottoVivo) {
+  const vivo = processi[cosa] && processi[cosa].vivo;
+  const b = document.createElement("button");
+  b.className = "azione" + (vivo ? " viva" : "");
+  b.onclick = () => vivo ? ferma(cosa) : avvia(cosa);
+  b.innerHTML =
+    '<span class="num">' + (vivo ? "■" : numero) + "</span>" +
+    '<span class="testo"><b>' + titolo + "</b><small>" +
+      (vivo ? (sottoVivo || "in corso…") : sotto) + "</small></span>" +
+    '<span class="fine">' + (vivo ? "Ferma" : "Avvia") + "</span>";
+  return b;
+}
+
+function disegnaPassi() {
+  const ospite = config && config.ruolo === "ospite";
+
+  const r = $("riga-relay");
+  r.innerHTML = "";
+  if (ospite) {
+    r.appendChild(bottone("relay", "0", "Accendi il relay",
+      "Serve solo a chi ospita. Lascialo acceso per tutta la partita.",
+      "in ascolto: lascialo acceso per tutta la partita."));
+  }
+
+  const m = $("riga-multiboot"); m.innerHTML = "";
+  m.appendChild(bottone("multiboot", "1", "Carica il gioco nel GBA",
+    "Slot vuoto, GBA acceso. Schermo rosso ➜ inserisci la cartuccia ➜ verde.",
+    "caricamento in corso: schermo rosso ➜ cartuccia ➜ verde."));
+
+  const g = $("riga-gioca"); g.innerHTML = "";
+  g.appendChild(bottone("gioca", "2", "Gioca",
+    "Da premere quando sei in partita, all'aperto.",
+    "partita in corso."));
+
+  const f = $("btn-finto");
+  if (f) {
+    const vivoF = processi.finto && processi.finto.vivo;
+    f.textContent = vivoF ? "Ferma il partner finto"
+                          : "Prova da solo (partner finto)";
+  }
+}
+
+function toggleFinto() {
+  const vivo = processi.finto && processi.finto.vivo;
+  vivo ? ferma("finto") : avvia("finto");
+}
+
+async function copiaLog(bottone) {
+  const originale = bottone.textContent;
+  bottone.textContent = "Copio...";
+  try {
+    const testo = await (await fetch("/api/log")).text();
+    // navigator.clipboard c'e' solo in contesto sicuro: 127.0.0.1 lo e', ma
+    // se il browser fa storie si ripiega sul vecchio trucco della textarea,
+    // che funziona ovunque.
+    let fatto = false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try { await navigator.clipboard.writeText(testo); fatto = true; }
+      catch (e) { fatto = false; }
+    }
+    if (!fatto) {
+      const ta = document.createElement("textarea");
+      ta.value = testo;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      fatto = document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    const righe = testo.split("\n").length - 1;
+    bottone.textContent = fatto ? ("Copiato! (" + righe + " righe)")
+                                : "Non ci riesco: apri /api/log";
+  } catch (e) {
+    bottone.textContent = "Errore: apri /api/log";
+  }
+  setTimeout(() => { bottone.textContent = originale; }, 2500);
+}
+
+async function avvia(cosa) {
+  const r = await post("/api/avvia", {cosa: cosa});
+  mostraEsito(r);
+  tick();
+}
+async function ferma(cosa) {
+  const r = await post("/api/ferma", {cosa: cosa});
+  mostraEsito(r);
+  tick();
+}
+function mostraEsito(r) {
+  const e = $("esito-azione");
+  e.textContent = r.ok ? "" : r.messaggio;
+  e.className = "esito" + (r.ok ? "" : " male");
+}
+
+// --- stato in cima ---------------------------------------------------------
+
+function spia(id, testo, stato) {
+  $(id).className = "spia" + (stato ? " " + stato : "");
+  $(id + "-testo").textContent = testo;
+}
+
+function disegnaStato(s) {
+  const inPartita = processi.gioca && processi.gioca.vivo;
+
+  // il tuo GBA
+  $("st-gba").textContent = s.mappa ? "In partita"
+                                    : (s.caricato ? "Programma caricato" : "Fermo");
+  $("st-mappa").textContent = s.mappa
+    ? ("mappa " + s.mappa + (s.caricato ? " · programma caricato" : ""))
+    : (s.caricato ? "in attesa che dica dove sei"
+                  : "programma non caricato: premi il passo 1");
+  spia("spia-gba", s.mappa ? "attivo" : (s.caricato ? "pronto" : "spento"),
+       s.mappa ? "ok" : (inPartita ? "no" : ""));
+
+  // l'amico
+  $("st-amico").textContent = s.amico ? "Collegato" : "In attesa";
+  const stanza = config ? config.stanza : "—";
+  const peer = config ? (config.ruolo === "ospite" ? 1 : 2) : "—";
+  $("st-stanza").textContent = "stanza " + stanza + " · sei il peer " + peer;
+  spia("spia-amico", s.amico ? "vivo" : "in attesa",
+       s.amico ? "ok" : (inPartita ? "no" : ""));
+
+  // canale
+  $("st-parole").textContent = s.parole_s ? s.parole_s : "—";
+  $("st-inviati").textContent = s.inviati;
+  $("st-ricevuti").textContent = s.ricevuti;
+
+  // cable club
+  const club = $("riga-club");
+  if (s.club) {
+    club.hidden = false;
+    $("club-titolo").textContent = "Cable Club — sessione in corso";
+    $("club-sotto").textContent = "ruolo " + String(s.club).toUpperCase() +
+      " · inviati " + s.inviati + " · ricevuti " + s.ricevuti;
+  } else {
+    club.hidden = true;
+  }
+
+  // l'insegna dondola solo quando si sta davvero camminando
+  $("marchio").style.boxShadow = (inPartita && s.mappa)
+    ? "0 6px 16px rgba(0,0,0,.35), 0 0 0 2px rgba(63,214,143,.55)"
+    : "0 6px 16px rgba(0,0,0,.35)";
+
+  const a = $("avviso");
+  if (s.avviso) { $("avviso-testo").textContent = s.avviso; a.hidden = false; }
+  else { a.hidden = true; }
+}
+
+// --- registro --------------------------------------------------------------
+
+function aggiungiRighe(righe) {
+  if (!righe || !righe.length) return;
+  const log = $("log");
+  const soloGioca = $("solo-gioca").checked;
+  const attaccato = $("autoscroll").checked;
+  for (const r of righe) {
+    if (soloGioca && r.chi !== "gioca") continue;
+    // relay.py stampa gia' "[relay] ...": senza questo si leggeva
+    // "[relay] [relay] in ascolto", che sembra un difetto e non lo e'.
+    let testo = r.testo.replace(new RegExp("^\\[" + r.chi + "\\]\\s*"), "");
+    const d = document.createElement("span");
+    const grave = /!!!|FALLIT|ERRORE|non riesco|NESSUN/i.test(testo);
+    d.className = "r " + r.chi + (grave ? " grave" : "");
+    d.innerHTML = '<span class="chi">[' + r.chi + "]</span> " +
+                  testo.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    log.appendChild(d);
+  }
+  while (log.childNodes.length > 1200) log.removeChild(log.firstChild);
+  if (attaccato) log.scrollTop = log.scrollHeight;
+}
+
+function pulisciLog() { $("log").innerHTML = ""; }
+
+$("solo-gioca").addEventListener("change", pulisciLog);
+
+tick();
+setInterval(tick, 500);
+</script>

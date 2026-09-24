@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gen3-poke-multiplayer</title>
+<meta name="description" content="Multigiocatore nell'overworld di Pokémon Smeraldo, su Game Boy Advance e cartuccia originali, attraverso internet.">
+<link rel="icon" href="img/favicon.png">
+<link rel="alternate" hreflang="en" href="index-en.html">
+<script src="js/lingua.js"></script>
+<!--
+  Pagina d'ingresso pubblica. Il pannello di gioco vero e' gioca.html,
+  la spiegazione lunga e i crediti completi sono in progetto.html.
+  >>> L'UNICA COSA DA CAMBIARE: l'indirizzo del repository GitHub, qui sotto in GITHUB. <<<
+-->
+<style>
+  :root {
+    --verde-cupo: #0f3428; --verde: #0f6b4a; --verde-vivo: #16a06e; --verde-chiaro: #3fd68f;
+    --carta: #f2ede1; --scheda: #fffdf7; --bordo: #dfd7c4; --inchiostro: #16211c;
+    --tenue: #5f685f; --ambra: #c07a12; --codice: #ece5d2;
+    --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --carta: #121a16; --scheda: #1a2520; --bordo: #2b3a33; --inchiostro: #e4ece6;
+      --tenue: #a1b0a6; --codice: #24332c; --verde: #4cc991; --verde-vivo: #3fd68f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --carta: #121a16; --scheda: #1a2520; --bordo: #2b3a33; --inchiostro: #e4ece6;
+    --tenue: #a1b0a6; --codice: #24332c; --verde: #4cc991; --verde-vivo: #3fd68f;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--carta); color: var(--inchiostro);
+         font: 16px/1.6 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; }
+  a { color: var(--verde); }
+  .muro { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+  code { background: var(--codice); border-radius: 5px; padding: 1px 6px; font: 13px/1.4 var(--mono); }
+
+  /* --- testata --- */
+  .testa { background: var(--verde-cupo); color: #eaf5ee; position: relative; overflow: hidden; }
+  .testa::after { content: ""; position: absolute; inset: auto 0 0 0; height: 26px;
+                  background: url(img/tile-erba-alta.png) repeat-x bottom / 32px; image-rendering: pixelated; opacity: .55; }
+  .testa .muro { padding-top: 54px; padding-bottom: 76px; position: relative; z-index: 1; }
+  .marchio { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -.01em; font-size: 15px; color: #bfe2cd; }
+  .riga-alta { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #eaf5ee; }
+  .marchio img { width: 26px; height: 26px; image-rendering: pixelated; }
+  h1 { font-size: clamp(32px, 6vw, 54px); line-height: 1.05; letter-spacing: -.03em; margin: 22px 0 14px; max-width: 16ch; }
+  .lead { font-size: clamp(17px, 2.2vw, 20px); color: rgba(234,245,238,.85); max-width: 60ch; margin: 0 0 28px; }
+  .bottoni { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 20px; border-radius: 12px;
+         font-weight: 700; text-decoration: none; font-size: 15.5px; border: 1px solid transparent; }
+  .btn.primo { background: var(--verde-chiaro); color: #0b2a1f; }
+  .btn.primo:hover { background: #62e3a6; }
+  .btn.secondo { background: rgba(255,255,255,.08); color: #eaf5ee; border-color: rgba(255,255,255,.25); }
+  .btn.secondo:hover { background: rgba(255,255,255,.16); }
+  .garanzie { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 26px 0 0; padding: 0; list-style: none; font-size: 14px; color: #bfe2cd; }
+  .garanzie li::before { content: "✓ "; color: var(--verde-chiaro); font-weight: 800; }
+
+  /* --- sezioni --- */
+  section { padding: 56px 0 8px; }
+  h2 { font-size: clamp(24px, 3.4vw, 32px); letter-spacing: -.02em; line-height: 1.15; margin: 0 0 8px; }
+  .sotto { color: var(--tenue); margin: 0 0 26px; max-width: 70ch; }
+  .griglia { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+  .scheda { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 16px; padding: 20px 22px; }
+  .scheda h3 { margin: 0 0 6px; font-size: 18px; }
+  .scheda p { margin: 6px 0; }
+  .scheda ol, .scheda ul { margin: 8px 0 4px; padding-left: 20px; }
+  .scheda li { margin: 5px 0; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+         color: var(--verde); margin-bottom: 8px; }
+  .scheda .btn { margin-top: 12px; }
+  .scheda .btn.primo { background: var(--verde); color: #fff; }
+  .scheda .btn.primo:hover { background: var(--verde-vivo); }
+
+  /* --- foto --- */
+  .foto { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  figure { margin: 0; background: var(--scheda); border: 1px solid var(--bordo); border-radius: 14px; overflow: hidden; }
+  figure img { display: block; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; image-rendering: pixelated; background: #000; }
+  figcaption { font-size: 13.5px; color: var(--tenue); padding: 9px 12px; }
+
+  /* --- catena --- */
+  .catena { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 22px; }
+  .anello { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 10px; padding: 8px 12px;
+            font-weight: 700; font-size: 14.5px; }
+  .anello small { display: block; font-weight: 400; color: var(--tenue); font-size: 12px; }
+  .freccia { color: var(--verde); font-weight: 800; }
+  details { background: var(--scheda); border: 1px solid var(--bordo); border-radius: 14px; padding: 0 20px; margin: 10px 0; }
+  summary { cursor: pointer; font-weight: 700; padding: 15px 0; list-style-position: outside; }
+  details[open] summary { border-bottom: 1px solid var(--bordo); margin-bottom: 8px; }
+  details p, details ul { margin: 10px 0 16px; }
+
+  /* --- crediti --- */
+  .claude { border-left: 5px solid var(--verde-vivo); }
+  .crediti { display: grid; grid-template-columns: 210px 1fr; gap: 6px 16px; margin: 0; }
+  .crediti dt { font-weight: 700; }
+  .crediti dd { margin: 0 0 6px; color: var(--tenue); }
+  @media (max-width: 620px) { .crediti { grid-template-columns: 1fr; } .crediti dd { margin-bottom: 12px; } }
+
+  footer { margin-top: 56px; padding: 26px 0 40px; border-top: 1px solid var(--bordo); color: var(--tenue); font-size: 13.5px; }
+  footer .muro { display: grid; gap: 10px; }
+</style>
+</head>
+<body>
+
+<header class="testa">
+  <div class="muro">
+    <div class="riga-alta"><div class="marchio"><img src="img/orma-treecko-scuro-bordo.png" alt="">gen3-poke-multiplayer</div><span id="lingua-slot"></span></div>
+    <h1>I tuoi amici, nel tuo Pokémon Smeraldo.</h1>
+    <p class="lead">Multigiocatore nell'overworld di Hoenn su <b>Game Boy Advance e cartuccia originali</b>,
+      attraverso internet. Li vedi camminare, correre, andare in bici e fare surf accanto a te —
+      animati dal motore vero del gioco.</p>
+    <div class="bottoni">
+      <a class="btn primo" href="gioca.html">Gioca ora →</a>
+      <a class="btn secondo" href="#come-provarlo">Come provarlo</a>
+      <a class="btn secondo js-github" href="#">Codice su GitHub</a>
+    </div>
+    <ul class="garanzie">
+      <li>ROM non modificata</li>
+      <li>salvataggio mai toccato</li>
+      <li>niente trucchi da fare in partita</li>
+      <li>fino a 4 giocatori</li>
+    </ul>
+  </div>
+</header>
+
+<main class="muro">
+
+  <section>
+    <h2>Così, sul serio</h2>
+    <p class="sotto">Foto scattate durante le prove: ogni personaggio in più è un altro giocatore, collegato da un'altra parte.</p>
+    <div class="foto">
+      <figure><img src="img/prove/2026-08-25-tre-giocatori-p1.png" alt="Tre giocatori in riva al mare, schermo del primo" loading="lazy"><figcaption>In tre sulla stessa spiaggia: lo schermo del giocatore 1…</figcaption></figure>
+      <figure><img src="img/prove/2026-08-25-tre-giocatori-p2.png" alt="La stessa scena dallo schermo del secondo giocatore" loading="lazy"><figcaption>…del giocatore 2…</figcaption></figure>
+      <figure><img src="img/prove/2026-08-25-tre-giocatori-p3.png" alt="La stessa scena dallo schermo del terzo giocatore" loading="lazy"><figcaption>…e del giocatore 3. Ognuno vede gli altri due.</figcaption></figure>
+      <figure><img src="img/prove/foto-p3-73.png" alt="Tre giocatori che camminano insieme" loading="lazy"><figcaption>Si cammina insieme, con l'animazione vera del gioco</figcaption></figure>
+      <figure><img src="img/prove/2026-08-27-club-due-emulatori-saletta.png" alt="Due giocatori nella saletta del Cable Club" loading="lazy"><figcaption>Nella saletta del Cable Club, via internet</figcaption></figure>
+      <figure><img src="img/prove/2026-08-27-SCAMBIO-FATTO-p1.png" alt="Scambio completato via internet" loading="lazy"><figcaption>E lo scambio va fino in fondo</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="come-provarlo">
+    <h2>Come provarlo</h2>
+    <p class="sotto">Tre modi, e tutti e tre finiscono nella stessa partita. Mettetevi d'accordo su un
+      <b>numero di stanza</b> (1–65535, uno qualsiasi: è il vostro «tavolo») e usatelo tutti.</p>
+    <div class="griglia">
+      <div class="scheda">
+        <span class="tag">GBA vero</span>
+        <h3>Col tuo Game Boy Advance</h3>
+        <ol>
+          <li>Flasha una volta il Pico con <code>celio.uf2</code> (BOOTSEL + trascina il file).</li>
+          <li>Su Windows, una volta: driver <b>WinUSB</b> per il Pico con <a href="https://zadig.akeo.ie/" rel="noopener">Zadig</a>.</li>
+          <li>Apri il pannello in <b>Chrome o Edge</b> → <b>Collega il Pico</b>.</li>
+          <li>GBA acceso <b>senza cartuccia</b> → <b>Carica il gioco</b> (schermo rosso, ~15 s).</li>
+          <li>Inserisci la cartuccia a console accesa → verde → Smeraldo parte.</li>
+          <li>Scrivi la stanza → <b>Gioca</b>.</li>
+        </ol>
+        <a class="btn primo" href="gioca.html">Apri il pannello</a>
+      </div>
+      <div class="scheda">
+        <span class="tag">Emulatore</span>
+        <h3>In mGBA, sul PC</h3>
+        <ol>
+          <li>Installa <a href="https://mgba.io/" rel="noopener">mGBA</a> 0.10 o successivo.</li>
+          <li>Nel pannello scrivi la stanza e premi <b>«Scarica lo script per l'emulatore»</b>.</li>
+          <li>Apri il <b>tuo</b> Pokémon Smeraldo italiano, entra in partita.</li>
+          <li><i>Tools → Scripting → Load script</i> → lo script scaricato. Fatto.</li>
+        </ol>
+        <p style="color:var(--tenue);font-size:14px">GBA veri ed emulatori giocano insieme. Dentro il gioco, <b>L+R+B</b> apre un pannellino per cambiare stanza.</p>
+        <a class="btn primo" href="gioca.html">Scarica lo script dal pannello</a>
+      </div>
+      <div class="scheda">
+        <span class="tag">Senza niente</span>
+        <h3>Guarda e basta</h3>
+        <p>Nessun GBA, nessun emulatore, anche da Firefox: entra come <b>spettatore</b> nella stanza di un amico e segui
+          tutti sulla <b>Mappa live</b> di Hoenn, in tempo reale.</p>
+        <p style="color:var(--tenue);font-size:14px">Gli spettatori non occupano posto: la stanza tiene 4 giocatori, gli spettatori sono illimitati.</p>
+        <a class="btn primo" href="gioca.html">Entra come spettatore</a>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Come funziona</h2>
+    <p class="sotto">Pokémon Smeraldo non ha nessuna funzione per disegnare un altro giocatore nella tua mappa.
+      gen3-poke-multiplayer gliela aggiunge <b>senza toccare la cartuccia</b>: un programma piccolissimo (~11 KB) entra nella
+      memoria della console a ogni accensione e lavora accanto al gioco.</p>
+
+    <div class="catena" aria-label="La catena dei dati">
+      <span class="anello">GBA<small>cartuccia originale</small></span><span class="freccia">⇄</span>
+      <span class="anello">Cavo link<small>5 contatti</small></span><span class="freccia">⇄</span>
+      <span class="anello">Raspberry Pi Pico<small>firmware Celio esteso</small></span><span class="freccia">⇄</span>
+      <span class="anello">Browser o PC<small>WebUSB / USB</small></span><span class="freccia">⇄</span>
+      <span class="anello">Relay<small>WebSocket · UDP</small></span><span class="freccia">⇄</span>
+      <span class="anello">…l'amico<small>stessa strada al contrario</small></span>
+    </div>
+
+    <details open>
+      <summary>1 · Come entra il programma nel GBA, senza trucchi in partita</summary>
+      <p>Il GBA ha una funzione di fabbrica, il <b>multiboot</b>: acceso senza cartuccia, accetta un programma dal cavo link.
+        Noi carichiamo uno «stub» che si mette in un angolo di memoria che Smeraldo non usa e aspetta. Quando inserisci la
+        cartuccia, lo stub salta dentro l'avvio del gioco <b>subito dopo</b> il punto in cui la memoria viene azzerata:
+        così il nostro programma sopravvive, e Smeraldo parte normalmente con lui dentro.</p>
+      <p>Il programma si aggancia al gioco riscrivendo un solo puntatore in RAM — il vettore delle interruzioni —
+        e da lì gira a ogni fotogramma. La cartuccia è ROM a maschera: non si può modificare nemmeno volendo, e
+        il salvataggio non viene mai scritto. Spegni la console e non resta traccia.</p>
+    </details>
+    <details>
+      <summary>2 · Perché l'amico si muove come un personaggio vero</summary>
+      <p>Grazie alle decompilazioni del gioco fatte dalla comunità (<a href="https://github.com/pret/pokeemerald" rel="noopener">pret/pokeemerald</a>)
+        conosciamo l'indirizzo di ogni funzione originale. Il programma non reimplementa niente: crea l'amico con la
+        stessa funzione che il gioco usa per i suoi abitanti, e lo muove dandogli <b>azioni</b> («fai un passo verso nord»),
+        non coordinate. Animazione, passi, bici e surf li disegna il motore di Smeraldo, esattamente come per un NPC.</p>
+    </details>
+    <details>
+      <summary>3 · Perché internet non si nota</summary>
+      <p>Non mandiamo la posizione a ogni fotogramma: mandiamo <b>eventi</b>, «ho iniziato un passo in questa direzione da questa
+        casella», in 12 byte, più una correzione ogni tanto. Con 100 ms di ping l'amico è mezzo passo dietro: invisibile.
+        Il server (relay) non capisce niente del gioco — smista pacchetti fra i giocatori della stessa stanza, e basta.</p>
+      <p>L'ultimo tratto, dal PC al GBA, perde qualche pacchetto: ogni passo viene quindi inviato due volte, e il GBA
+        scarta la copia. È la differenza fra un amico che scivola e uno che cammina.</p>
+    </details>
+    <details>
+      <summary>4 · Cosa non fa (ancora)</summary>
+      <ul>
+        <li>Per ora solo <b>Pokémon Smeraldo italiano</b>.</li>
+        <li>L'amico si vede sulla tua mappa e nella striscia di mappa accanto che il gioco tiene caricata; più in là no.</li>
+        <li>Su una mappa molto affollata il gioco ha posto per 2-3 amici (16 personaggi per mappa in tutto).</li>
+        <li>Gli allenatori non ti vedono se l'amico è in mezzo: per il gioco, la vista è una collisione.</li>
+        <li>Da emulatore non si entra nel Cable Club: scambi e lotte via internet sono fra GBA veri.</li>
+        <li>WebUSB c'è solo su Chrome ed Edge: da Firefox e Safari si guarda e basta.</li>
+      </ul>
+    </details>
+    <p style="margin-top:18px"><a href="progetto.html">La spiegazione completa</a> · <a class="js-github" href="#">il codice e il README tecnico su GitHub</a></p>
+  </section>
+
+  <section>
+    <h2>Chi l'ha fatto</h2>
+    <div class="griglia" style="grid-template-columns: 1fr;">
+      <div class="scheda claude">
+        <span class="tag">Il codice</span>
+        <h3>Scritto da Claude, di Anthropic</h3>
+        <p>La fonte principale di questo progetto è <a href="https://www.anthropic.com/claude" rel="noopener">Claude</a> (Claude Code):
+          il programma che gira dentro il GBA, lo stub multiboot, le estensioni al firmware del Pico, il driver seriale, il protocollo
+          di rete, il relay, questo sito, il Cable Club via internet e la Mappa live sono stati scritti da Claude, sessione dopo
+          sessione.</p>
+        <p><b>Lain</b> ha avuto l'idea, messo l'hardware, fissato le regole («nessun trucco dentro il gioco, mai», «cartuccia italiana»,
+          «non si tocca la ROM») e fatto tutte le prove sul campo — con <a href="https://github.com/SickPick97" rel="noopener"><b>Hacke</b></a> dall'altra parte del relay,
+          il primo amico ad averlo provato via internet.</p>
+      </div>
+      <div class="scheda">
+        <span class="tag">Sulle spalle di</span>
+        <dl class="crediti">
+          <dt>pret</dt><dd>le decompilazioni combacianti di Smeraldo e Rosso Fuoco: la mappa di ogni indirizzo del gioco.</dd>
+          <dt>Progetto Celio</dt><dd>il firmware RP2040 dell'adattatore USB-GBA, base di tutto lo strato hardware.</dd>
+          <dt>smashstacking</dt><dd>l'adattatore GBA-USB su cui Celio è tarato.</dd>
+          <dt>agtbaskara · weimanc</dt><dd>le schede link per Raspberry Pi Pico.</dd>
+          <dt>endrift e mGBA</dt><dd>l'emulatore con scripting Lua usato per tutto lo sviluppo.</dd>
+          <dt>Martin Korth</dt><dd>GBATEK, la documentazione tecnica del Game Boy Advance.</dd>
+          <dt>Comunità Celio-Link (GBAtemp)</dt><dd>per aver sciolto per prima lo strato hardware più ostico.</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="muro">
+    <div><a href="gioca.html"><b>Pannello di gioco</b></a> · <a href="mappa.html">Mappa live</a> · <a href="progetto.html">Come funziona e crediti</a> · <a class="js-github" href="#">GitHub</a></div>
+    <div>Pokémon, Game Boy Advance e i nomi correlati sono marchi di Nintendo, Creatures Inc. e GAME FREAK inc.
+      Progetto amatoriale senza fini di lucro, non affiliato né approvato da loro. Non distribuisce il gioco:
+      serve la propria cartuccia originale.</div>
+  </div>
+</footer>
+
+<script>
+  // >>> Metti qui l'indirizzo del repository appena pubblicato. <<<
+  var GITHUB = "https://github.com/Wired-Ariel/Wired-Ariel";
+  document.querySelectorAll(".js-github").forEach(function (a) { a.href = GITHUB; a.rel = "noopener"; });
+</script>
+</body>
+</html>

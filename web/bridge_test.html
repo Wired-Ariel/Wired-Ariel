@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>test bridge.js</title>
+<style>body{font:14px Consolas,monospace;background:#0e1117;color:#e6e6e6;padding:16px} .ok{color:#7ee787} .ko{color:#ff7b72} .nota{color:#9aa4b2}</style>
+</head>
+<body>
+<h2>bridge.js + relay.js — gli stessi casi di tools/test_ricucitura.py, piu' dedup, VIA e header</h2>
+<p class="nota">Aggiungi <code>?relay=ws://127.0.0.1:9001</code> all'URL per la prova INTEGRATA: due bridge in questa pagina parlano attraverso relay_ws.py + relay.py veri (servono accesi).</p>
+<pre id="out"></pre>
+<script src="js/sio.js"></script>
+<script src="js/relay.js"></script>
+<script src="js/club.js"></script>
+<script src="js/bridge.js"></script>
+<script>
+(function () {
+  var out = [], ok = 0, ko = 0, EV = OwlBridge.EV;
+  function eq(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function t(nome, fn) {
+    try { var r = fn(); if (r === true) { ok++; out.push("<span class=ok>OK </span>" + nome); }
+          else { ko++; out.push("<span class=ko>KO </span>" + nome + " -> " + JSON.stringify(r)); } }
+    catch (e) { ko++; out.push("<span class=ko>KO </span>" + nome + " -> " + e.message); }
+  }
+  function ev(kind, dir, x, y, mapn, seq, mapg) {
+    var b = new Uint8Array(12);
+    b[0] = kind; b[1] = dir; b[2] = 1; b[3] = seq === undefined ? 7 : seq; b[4] = mapg || 0; b[5] = mapn === undefined ? 2 : mapn;
+    b[6] = x & 0xFF; b[7] = (x >> 8) & 0xFF; b[8] = y & 0xFF; b[9] = (y >> 8) & 0xFF;
+    return b;
+  }
+  function descr(e) { var s16 = function (lo, hi) { var v = lo | (hi << 8); return v & 0x8000 ? v - 0x10000 : v; }; return [e[0], e[1], s16(e[6], e[7]), s16(e[8], e[9])]; }
+  function fake(copie) {
+    var outEv = [];
+    var b = new OwlBridge({ peerId: 1, room: 1, copies: copie || 1, device: { sendEvent: function (e) { outEv.push(new Uint8Array(e)); return Promise.resolve(); } }, log: function () {} });
+    b.copyTokens = 1e9;   // secchiello pieno e fermo: qui si prova la ridondanza, non il tetto
+    b.out = outEv;
+    return b;
+  }
+  function dedupPayload(eventi) { var last = null, o = []; for (var i = 0; i < eventi.length; i++) { var e = eventi[i]; if (e[0] === 1 || e[0] === 3) { if (last !== null && e[3] === last) continue; last = e[3]; } o.push(e); } return o; }
+
+  function caso(nome, eventi, attesi, healed, far) {
+    var f = fake();
+    eventi.forEach(function (e) { f.healAndDeliver(1, e); });
+    var got = f.out.map(descr);
+    t(nome, function () { return (eq(got, attesi) && f.healed === healed && f.healFar === (far || 0)) || { got: got, healed: f.healed, far: f.healFar }; });
+    return f;
+  }
+
+  // --- la ricucitura (identica a tools/test_ricucitura.py) ---
+  caso("passi contigui, nessuna sintesi", [ev(1, 4, 11, 16), ev(1, 4, 12, 16)], [[1, 4, 11, 16], [1, 4, 12, 16]], 0);
+  caso("passo perso in retta -> 1 sintetico", [ev(2, 4, 10, 16), ev(1, 4, 12, 16)], [[2, 4, 10, 16], [1, 4, 11, 16], [1, 4, 12, 16]], 1);
+  caso("buco a L -> nessuna sintesi", [ev(2, 4, 10, 16), ev(1, 1, 11, 17)], [[2, 4, 10, 16], [1, 1, 11, 17]], 0);
+  caso("SYNC con buco a L -> nessuna sintesi", [ev(2, 4, 10, 16), ev(2, 4, 12, 17)], [[2, 4, 10, 16], [2, 4, 12, 17]], 0);
+  caso("buco contro la direzione del passo -> nessuna sintesi", [ev(2, 3, 14, 16), ev(1, 4, 12, 16)], [[2, 3, 14, 16], [1, 4, 12, 16]], 0);
+  caso("SYNC dopo 2 passi persi -> 2 sintetici", [ev(2, 4, 10, 16), ev(2, 4, 12, 16)], [[2, 4, 10, 16], [1, 4, 11, 16], [1, 4, 12, 16], [2, 4, 12, 16]], 2);
+  caso("cambio mappa -> nessuna sintesi", [ev(2, 4, 10, 16, 2), ev(1, 3, 66, 16, 32)], [[2, 4, 10, 16], [1, 3, 66, 16]], 0);
+  caso("buco largo -> heal_far, nessuna sintesi", [ev(2, 4, 10, 16), ev(2, 4, 20, 16)], [[2, 4, 10, 16], [2, 4, 20, 16]], 0, 1);
+  caso("GIRA dopo un passo perso -> 1 sintetico", [ev(2, 4, 10, 16), ev(3, 2, 11, 16)], [[2, 4, 10, 16], [1, 4, 11, 16], [3, 2, 11, 16]], 1);
+  caso("SYNC da fermo, nessuna sintesi", [ev(2, 4, 10, 16), ev(2, 4, 10, 16), ev(2, 4, 10, 16)], [[2, 4, 10, 16], [2, 4, 10, 16], [2, 4, 10, 16]], 0);
+  caso("STATO in mezzo non rompe la catena", [ev(2, 4, 10, 16), ev(5, 2, 0, 0), ev(1, 4, 11, 16)], [[2, 4, 10, 16], [5, 2, 0, 0], [1, 4, 11, 16]], 0);
+  caso("PASSO con direzione fuori tabella -> consegna diretta", [ev(2, 4, 10, 16), ev(1, 9, 12, 16)], [[2, 4, 10, 16], [1, 9, 12, 16]], 0);
+
+  var f = caso("tre passi ricuciti (seq controllato sotto)", [ev(2, 4, 10, 16, 2, 40), ev(1, 4, 14, 16, 2, 44)],
+               [[2, 4, 10, 16], [1, 4, 11, 16], [1, 4, 12, 16], [1, 4, 13, 16], [1, 4, 14, 16]], 3);
+  t("i sintetici prendono i seq persi (S-gap..S-1)", function () { var s = f.out.map(function (e) { return e[3]; }); return eq(s, [40, 41, 42, 43, 44]) || s; });
+
+  t("ricucitura + copie x2 + dedup = ogni passo applicato una volta", function () {
+    var g = fake(2);
+    g.healAndDeliver(1, ev(2, 4, 10, 16, 2, 40)); g.healAndDeliver(1, ev(1, 4, 14, 16, 2, 44));
+    var dopo = dedupPayload(g.out).map(descr);
+    return (eq(dopo, [[2, 4, 10, 16], [1, 4, 11, 16], [1, 4, 12, 16], [1, 4, 13, 16], [1, 4, 14, 16]]) && g.out.length === 9 && g.wireSent === 9) || { dopo: dopo, n: g.out.length, scritti: g.wireSent };
+  });
+  t("persa una copia qualunque delle due, il passo arriva comunque", function () {
+    var a = fake(2); a.healAndDeliver(1, ev(1, 4, 11, 16, 2, 50));
+    var b = fake(2); b.healAndDeliver(1, ev(1, 4, 11, 16, 2, 50));
+    return (dedupPayload([a.out[0]]).length === 1 && dedupPayload([b.out[1]]).length === 1 && eq(descr(a.out[0]), descr(b.out[1]))) || [a.out.length, b.out.length];
+  });
+  t("il VIA non viene mai duplicato", function () { var g = fake(2); g.deliver(ev(4, 0, 0, 0, 2, 0)); return g.out.length === 1 || g.out.length; });
+  t("lo STATO non viene mai duplicato", function () { var g = fake(2); g.deliver(ev(5, 1, 0, 0, 2, 9)); return g.out.length === 1 || g.out.length; });
+  t("a secchiello vuoto la copia si salta e si conta", function () {
+    var g = fake(2); g.copyTokens = 0; g.copyStamp = performance.now();
+    g.deliver(ev(1, 4, 11, 16, 2, 60));
+    return (g.out.length === 1 && g.copiesSkipped === 1) || [g.out.length, g.copiesSkipped];
+  });
+  t("simulatore di perdita sul filo: conta i buttati", function () {
+    var g = fake(2); g.wireLoss = 1; g.rand = function () { return 0; };
+    g.deliver(ev(1, 4, 11, 16, 2, 61));
+    return (g.out.length === 0 && g.wireDropped === 2) || [g.out.length, g.wireDropped];
+  });
+
+  // --- lo SPETTATORE (2026-08-26): il verbo con cui si entra in stanza ---
+  function bridgeFinto(opts) {
+    var mandati = [];
+    var o = { peerId: 42, room: 7, device: null, log: function () {} };
+    for (var k in (opts || {})) o[k] = opts[k];
+    var b = new OwlBridge(o);
+    b.link = { invia: function (d) { mandati.push(d); }, aperta: true };
+    b.sendRelay = function (d) { mandati.push(d); };
+    b.mandati = mandati;
+    return b;
+  }
+
+  t("spettatore: entra in stanza con WATCH (5), non con HELLO", function () {
+    var b = bridgeFinto({ spettatore: true });
+    b.sendHello();
+    var p = OwlRelay.unpack(b.mandati[0]);
+    return (p.kind === OwlRelay.T.WATCH && p.kind === 5 && b.watchInviati === 1) || p.kind;
+  });
+
+  t("giocatore: entra con HELLO (0) - la compatibilita' non si tocca", function () {
+    var b = bridgeFinto({});
+    b.sendHello();
+    var p = OwlRelay.unpack(b.mandati[0]);
+    return (p.kind === OwlRelay.T.HELLO && p.kind === 0 && b.watchInviati === 0) || p.kind;
+  });
+
+  t("spettatore: start() arma la ritrasmissione del WATCH, stop() la spegne", function () {
+    var b = bridgeFinto({ spettatore: true });
+    b.start();
+    var armato = b.timerWatch !== null;
+    b.stop();
+    var spento = b.timerWatch === null;
+    var g = bridgeFinto({});
+    g.start(); var giocatoreSenza = g.timerWatch === null; g.stop();
+    return (armato && spento && giocatoreSenza) ||
+           ("armato " + armato + " spento " + spento + " giocatore " + giocatoreSenza);
+  });
+
+  t("spettatore: il PING resta kind 2 (l'RTT non passa dal WATCH)", function () {
+    var b = bridgeFinto({ spettatore: true });
+    b.sendPing();
+    var p = OwlRelay.unpack(b.mandati[0]);
+    return p.kind === OwlRelay.T.PING || p.kind;
+  });
+
+  // --- il generatore dello script per l'emulatore (2026-08-26) ---
+  // La funzione vive in app.js, che qui non e' caricato (tira su tutta la
+  // pagina): si prova la STESSA logica, e il contratto con app.js e' che le
+  // tre righe siano quelle. Se app.js cambiasse formato, il caso "riga
+  // mancante" qui sotto resterebbe verde ma il sito fallirebbe rumorosamente
+  // da solo, che e' il comportamento voluto.
+  function configuraLuaProva(testo, url, stanza, peer) {
+    var righe = [
+      { nome: "RELAY_URL", re: /^RELAY_URL\s*=.*$/m, val: 'RELAY_URL = "' + url + '"' },
+      { nome: "RELAY_ROOM", re: /^RELAY_ROOM\s*=.*$/m, val: "RELAY_ROOM = " + stanza },
+      { nome: "RELAY_PEER", re: /^RELAY_PEER\s*=.*$/m, val: "RELAY_PEER = " + peer }
+    ];
+    for (var i = 0; i < righe.length; i++) {
+      if (!righe[i].re.test(testo)) throw new Error("template non compatibile: manca " + righe[i].nome);
+      testo = testo.replace(righe[i].re, righe[i].val);
+    }
+    return testo;
+  }
+  var TEMPLATE_FINTO = [
+    "PAYLOAD_BASE = 0x0203CF80",
+    'LINK_ROLE = "relay"',
+    'RELAY_URL = "ws://vecchio/ws"',
+    "RELAY_ROOM = 1",
+    "RELAY_PEER = 0",
+    'ROM_titolo = "POKEMON EMER"'
+  ].join("\n") + "\n";
+
+  t("script per l'emulatore: le tre righe vengono riscritte, il resto no", function () {
+    var out = configuraLuaProva(TEMPLATE_FINTO, "ws://host/ws", 58243, 0);
+    return (/^RELAY_URL = "ws:\/\/host\/ws"$/m.test(out) &&
+            /^RELAY_ROOM = 58243$/m.test(out) &&
+            /^RELAY_PEER = 0$/m.test(out) &&
+            out.indexOf('PAYLOAD_BASE = 0x0203CF80') === 0 &&
+            out.indexOf('ROM_titolo = "POKEMON EMER"') > 0 &&
+            out.indexOf("vecchio") < 0) || out;
+  });
+
+  t("script per l'emulatore: template monco -> ERRORE, non un file sbagliato", function () {
+    var monco = TEMPLATE_FINTO.replace(/^RELAY_ROOM.*$/m, "");
+    try { configuraLuaProva(monco, "ws://host/ws", 1, 0); return "non ha alzato errore"; }
+    catch (e) { return /RELAY_ROOM/.test(e.message) || e.message; }
+  });
+
+  t("script per l'emulatore: wss:// diventa ws:// (il Lua non ha TLS)", function () {
+    function relayPerLua(url) {
+      if (/^wss:\/\//i.test(url)) return { url: "ws://" + url.slice(6), degradato: true };
+      if (/^ws:\/\//i.test(url)) return { url: url, degradato: false };
+      return { url: "ws://" + url.replace(/^https?:\/\//i, ""), degradato: false };
+    }
+    var a = relayPerLua("wss://gbcatrade.wired-ariel.it/passotile/ws");
+    var b = relayPerLua("ws://127.0.0.1:9001/");
+    return (a.url === "ws://gbcatrade.wired-ariel.it/passotile/ws" && a.degradato === true &&
+            b.url === "ws://127.0.0.1:9001/" && b.degradato === false) || [a, b];
+  });
+
+  // --- L'ANIMAZIONE DELLA MAPPA (2026-08-26) ---
+  //
+  // Il difetto e' tornato DUE volte ("gli avatar saltano come pedine"), e le
+  // due volte e' stato visto a occhio da Lain. Qui si misura invece di
+  // guardare: si prendono le funzioni VERE da mappa.html (fetch + estrazione,
+  // niente copia che poi diverge), si da' loro un orologio finto e si contano
+  // i cicli di passo, il ritardo accumulato e i passi all'indietro.
+  //
+  // Le andature sono quelle del gioco: a piedi un tile ogni 16 frame
+  // (~266 ms), di corsa 8 (~133), in bici 4 (~66). Alla mappa arrivano
+  // POSIZIONI ogni ~260 ms, quindi 1, 2 e 4 tile per campione.
+  function motoreMappa(src) {
+    var i = src.indexOf("var anim = {};");
+    var j = src.indexOf("// Finche' qualcuno cammina");
+    if (i < 0 || j < 0) throw new Error("blocco dell'animazione non trovato in mappa.html");
+    return new Function(
+      "var orologio = 0; var performance = { now: function () { return orologio; } };\n" +
+      src.slice(i, j) +
+      "\nreturn { anim: anim, agg: aggiornaAnim, pos: posAnim, tempo: function (t) { orologio = t; } };")();
+  }
+
+  function corsaSimulata(m, passiPerCampione, periodo, nCampioni) {
+    delete m.anim[7];
+    m.tempo(0); m.agg({ peer: 7, x: 0, y: 0 });
+    var storia = [], x = 0;
+    for (var c = 1; c <= nCampioni; c++) {
+      var tA = c * periodo;
+      m.tempo(tA); x += passiPerCampione; m.agg({ peer: 7, x: x, y: 0 });
+      for (var t = tA; t < tA + periodo; t += 16) {
+        m.tempo(t); var p = m.pos(7); storia.push({ x: p.x, f: p.f, cam: p.cammina });
+      }
+    }
+    var cicli = 0, indietro = 0;
+    for (var k = 1; k < storia.length; k++) {
+      if (storia[k].f !== 0 && storia[k - 1].f === 0) cicli++;
+      if (storia[k].x < storia[k - 1].x - 1e-6) indietro++;
+    }
+    return { tile: x, cicli: cicli, indietro: indietro,
+             ritardo: x - storia[storia.length - 1].x,
+             fermo: storia.filter(function (s) { return !s.cam; }).length / storia.length };
+  }
+
+  (function () {
+    var req = new XMLHttpRequest();
+    try { req.open("GET", "mappa.html", false); req.send(null); } catch (e) { req.status = 0; }
+    if (req.status !== 200) {
+      out.push("<span class=nota>(mappa.html non servita da qui: salto i casi dell'animazione)</span>");
+      return;
+    }
+    var m = motoreMappa(req.responseText);
+
+    t("mappa: a piedi, un passo per tile e nessun ritardo", function () {
+      var r = corsaSimulata(m, 1, 266, 6);
+      return (r.cicli >= r.tile - 1 && r.ritardo < 0.2 && r.indietro === 0 && r.fermo === 0) || r;
+    });
+
+    t("mappa: DI CORSA (2 tile per campione) cammina, non scivola", function () {
+      var r = corsaSimulata(m, 2, 266, 6);
+      // il punto: due tile = DUE cicli di passo, non uno solo lungo il doppio
+      return (r.cicli >= r.tile - 2 && r.ritardo < 0.5 && r.indietro === 0) || r;
+    });
+
+    t("mappa: IN BICI (4 tile per campione) si anima e non resta indietro", function () {
+      var r = corsaSimulata(m, 4, 266, 6);
+      // prima di 2026-08-26: nessuna animazione (PASSO_MAX 3), poi 8 tile di ritardo
+      return (r.fermo < 0.1 && r.cicli >= 12 && r.ritardo < 1.5) || r;
+    });
+
+    t("mappa: un WARP non si anima (sarebbe una bugia)", function () {
+      var r = corsaSimulata(m, 20, 266, 2);
+      return (r.fermo === 1 && r.cicli === 0) || r;
+    });
+  })();
+
+  // --- l'header OWL1 e il dedup dei datagrammi (accept_seq) ---
+  t("pack/unpack: 11 byte di header, magic OWL1, campi al posto giusto", function () {
+    var d = OwlRelay.pack(OwlRelay.T.EVENT, 0x1234, 0xABCD, 0x56, new Uint8Array([9, 8, 7]));
+    var p = OwlRelay.unpack(d);
+    return (d.length === 14 && d[0] === 0x4F && d[1] === 0x57 && d[2] === 0x4C && d[3] === 0x31 && d[4] === 1 &&
+            p.kind === 1 && p.peerId === 0x1234 && p.roomId === 0xABCD && p.seq === 0x56 && eq(Array.from(p.body), [9, 8, 7])) || Array.from(d);
+  });
+  t("unpack rifiuta magic e versione sbagliati", function () {
+    var d = OwlRelay.pack(1, 1, 1, 1); var e = new Uint8Array(d); e[4] = 2; var m = new Uint8Array(d); m[0] = 0x58;
+    return (OwlRelay.unpack(e) === null && OwlRelay.unpack(m) === null && OwlRelay.unpack(new Uint8Array(5)) === null) || "accettato";
+  });
+  t("acceptSeq: duplicato scartato, arretrato scartato, riavvolgimento a 255->0 accettato", function () {
+    var g = fake();
+    var a = g.acceptSeq(7, 10), b = g.acceptSeq(7, 10), c = g.acceptSeq(7, 9), d = g.acceptSeq(7, 11);
+    var g2 = fake(); g2.acceptSeq(8, 255); var e = g2.acceptSeq(8, 0); var f2 = g2.acceptSeq(8, 129);
+    return (a && !b && !c && d && g.dupDropped === 1 && g.lateDropped === 1 && e && !f2) || [a, b, c, d, e, f2];
+  });
+  t("T_BYE dal relay -> VIA (tipo 4) al GBA con la mappa dell'ultimo evento del peer", function () {
+    var g = fake();
+    g.onRelayMessage(OwlRelay.pack(OwlRelay.T.EVENT, 5, 1, 1, ev(1, 4, 11, 16, 32)));
+    g.onRelayMessage(OwlRelay.pack(OwlRelay.T.BYE, 5, 1, 0));
+    var last = g.out[g.out.length - 1];
+    return (g.out.length === 2 && last[0] === 4 && last[4] === 0 && last[5] === 32 && g.leaves === 1 && !g.peers[5]) || g.out.map(descr);
+  });
+  t("PONG misura l'RTT", function () {
+    var g = fake(); var inviati = []; g.link = { send: function (b) { inviati.push(b); return true; } };
+    g.sendPing(); var p = OwlRelay.unpack(inviati[0]);
+    g.onRelayMessage(OwlRelay.pack(OwlRelay.T.PONG, 1, 1, p.seq));
+    return (p.kind === OwlRelay.T.PING && g.rtts.length === 1 && g.rtts[0] >= 0) || p;
+  });
+  t("evento dal GBA -> T_EVENT al relay con seq crescente e la mappa ricordata", function () {
+    var g = fake(); var inviati = []; g.link = { send: function (b) { inviati.push(OwlRelay.unpack(b)); return true; } };
+    g.onDeviceEvent(ev(1, 4, 11, 16, 32)); g.onDeviceEvent(ev(2, 4, 11, 16, 32));
+    return (inviati.length === 2 && inviati[0].kind === 1 && inviati[0].seq === 1 && inviati[1].seq === 2 && g.mapKey === 32 && g.sent === 2 && eq(Array.from(inviati[0].body), Array.from(ev(1, 4, 11, 16, 32)))) || inviati;
+  });
+  t("EVENT_CLUB dal GBA non si inoltra come evento; senza clubEnter sul device si dice e non parte", function () {
+    var g = fake(); var inviati = []; g.link = { send: function (b) { inviati.push(b); return true; } };
+    g.onDeviceEvent(ev(7, 0, 0, 0));
+    return (inviati.length === 0 && g.clubAvvisi === 1 && g.club === null && g.clubSessions === -1) || [inviati.length, g.clubSessions];
+  });
+
+  // --- IL CABLE CLUB (2026-08-26): gli stessi casi di net/test_club.py -------
+  //
+  // Due ClubSession collegate da una rete finta che PERDE e RIORDINA come
+  // l'UDP vero, e due device finti che recitano gli stati del firmware Celio.
+  // La sessione (club.js) e' il porting riga per riga di club_link.py: questi
+  // test sono il porting riga per riga di test_club.py, piu' i casi nuovi del
+  // browser (ruoli coi peer sorteggiati, partner dal primo T_CLUB).
+  (function () {
+    var C = OwlClub, CP = C.proto, ST = C.ST, CC = C.CMD;
+
+    function fdev() {
+      return { commands: [], blocks: [],
+               command: function (c) { this.commands.push(c); },
+               sendBlock: function (b) { this.blocks.push(new Uint8Array(b)); } };
+    }
+    function fnet() {
+      var net = { aToB: [], bToA: [], drop: {}, reorder: false, conta: { a: 0, b: 0 } };
+      net.sender = function (lato) {
+        var coda = lato === "a" ? net.aToB : net.bToA;
+        return function (body) {
+          var i = net.conta[lato]++;
+          if (net.drop[i]) return;                    // perso per sempre
+          coda.push(new Uint8Array(body));
+        };
+      };
+      net.consegna = function (sess, coda) {
+        var pend = coda.splice(0, coda.length);
+        if (net.reorder && pend.length >= 2) { var t0 = pend[0]; pend[0] = pend[1]; pend[1] = t0; }
+        for (var i = 0; i < pend.length; i++) {
+          var p = CP.clubUnpack(pend[i]);
+          if (!p) continue;
+          if (p.sub === CP.CLUB_STATUS) sess.onNetStatus(p.epoca, p.sseq, p.status);
+          else if (p.sub === CP.CLUB_DATA) sess.onNetBlock(p.epoca, p.seq, p.block);
+          else if (p.sub === CP.CLUB_REQ) sess.onNetReq(p.epoca, p.seqs);
+          else if (p.sub === CP.CLUB_ENTER) sess.notaPartner(p.epoca);
+          else if (p.sub === CP.CLUB_LEAVE) sess.onNetLeave(p.epoca);
+        }
+      };
+      return net;
+    }
+    function blocco(n) {
+      var b = new Uint8Array(64);
+      for (var i = 0; i < 32; i++) { b[2 * i] = n & 0xFF; b[2 * i + 1] = (n >> 8) & 0xFF; }
+      return b;
+    }
+    function bloccoEq(a, b) { if (!a || !b || a.length !== b.length) return false; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; }
+    function blocchiSono(lista, nn) {
+      if (lista.length !== nn.length) return false;
+      for (var i = 0; i < nn.length; i++) if (!bloccoEq(lista[i], blocco(nn[i]))) return false;
+      return true;
+    }
+    function conta(arr, x) { var n = 0; for (var i = 0; i < arr.length; i++) if (arr[i] === x) n++; return n; }
+    function patchK(patch, fn) {
+      var vecchi = {};
+      for (var k in patch) { vecchi[k] = C.K[k]; C.K[k] = patch[k]; }
+      try { return fn(); } finally { for (var k2 in vecchi) C.K[k2] = vecchi[k2]; }
+    }
+    function coppia() {
+      var net = fnet(), da = fdev(), db = fdev();
+      // Come il setUp di test_club.py: sessione e sezione gia' armate, in
+      // silenzio (i casi che quel confine lo provano se lo aprono da soli).
+      var a = new C.ClubSession({ myPeer: 1, dev: da, sendNet: net.sender("a"), log: function () {} });
+      var b = new C.ClubSession({ myPeer: 2, dev: db, sendNet: net.sender("b"), log: function () {} });
+      a._avviata = b._avviata = true;
+      // Il distanziamento del ConnectLink si azzera: i casi fanno la scala
+      // in sincrono. Il ritardo vero ha il suo caso dedicato.
+      C.K.CONNECT_RITARDO_S = 0;
+      a._sezioneViva = b._sezioneViva = true;
+      // ... e la sezione COLLEGATA, che dal 2026-08-27 e' il cancello vero
+      // dei blocchi (i comandi della scala restano su _sezioneViva).
+      a._sezionePronta = b._sezionePronta = true;
+      var cc = { net: net, da: da, db: db, a: a, b: b };
+      cc.scambia = function () { for (var i = 0; i < 4; i++) { net.consegna(b, net.aToB); net.consegna(a, net.bToA); } };
+      cc.giro = function () {
+        a.onDeviceStatus(ST.HANDSHAKE_RX); b.onDeviceStatus(ST.HANDSHAKE_RX); cc.scambia();
+        a.onDeviceStatus(ST.CONNECTED); b.onDeviceStatus(ST.CONNECTED); cc.scambia();
+      };
+      return cc;
+    }
+
+    t("club: ruoli dal peer-id (1 = master, 2 = slave, come il Python)", function () {
+      var cc = coppia();
+      cc.a.onDeviceStatus(ST.AWAIT_MODE); cc.b.onDeviceStatus(ST.AWAIT_MODE);
+      return (conta(cc.da.commands, CC.SET_MODE_MASTER) === 1 && conta(cc.db.commands, CC.SET_MODE_SLAVE) === 1 &&
+              conta(cc.da.commands, CC.SET_MODE_SLAVE) === 0) || [cc.da.commands, cc.db.commands];
+    });
+
+    t("club: ruoloMaster - 1 sempre master, 2 sempre slave, altrimenti vince il piu' basso", function () {
+      var R2 = C.ruoloMaster;
+      return (R2(1, 47000) === true && R2(47000, 1) === false &&
+              R2(2, 47000) === false && R2(47000, 2) === true &&
+              R2(1, 2) === true && R2(2, 1) === false &&
+              R2(47000, 51000) === true && R2(51000, 47000) === false &&
+              R2(47000, null) === null) || "tabella sbagliata";
+    });
+
+    t("club: peer sorteggiato -> il ruolo ASPETTA il primo T_CLUB del partner", function () {
+      var d = fdev();
+      var s = new C.ClubSession({ myPeer: 47000, dev: d, sendNet: function () {}, log: function () {} });
+      s.onDeviceStatus(ST.AWAIT_MODE);
+      var primaDiSapere = d.commands.length;      // nessun comando di ruolo
+      s.setPartner(51000);                        // il piu' basso vince: master
+      return (primaDiSapere === 0 && conta(d.commands, CC.SET_MODE_MASTER) === 1 && s.master === true) || d.commands;
+    });
+
+    t("club: peer sorteggiato piu' alto -> slave; partner noto PRIMA di AwaitMode -> comando subito", function () {
+      var d = fdev();
+      var s = new C.ClubSession({ myPeer: 51000, dev: d, sendNet: function () {}, log: function () {} });
+      s.setPartner(47000);                        // gia' noto
+      var primaDiAwait = d.commands.length;
+      s.onDeviceStatus(ST.AWAIT_MODE);
+      return (primaDiAwait === 0 && conta(d.commands, CC.SET_MODE_SLAVE) === 1 && s.master === false) || d.commands;
+    });
+
+    t("club: Ready resta locale", function () {
+      var cc = coppia();
+      cc.a.onDeviceStatus(ST.READY);
+      return cc.net.aToB.length === 0 || cc.net.aToB.length;
+    });
+
+    t("club: StartHandshake SOLO quando entrambi, e una volta sola", function () {
+      var cc = coppia();
+      cc.a.onDeviceStatus(ST.HANDSHAKE_RX); cc.scambia();
+      var soloA = conta(cc.da.commands, CC.START_HANDSHAKE) === 0 && conta(cc.db.commands, CC.START_HANDSHAKE) === 0;
+      cc.b.onDeviceStatus(ST.HANDSHAKE_RX); cc.scambia();
+      var entrambi = conta(cc.da.commands, CC.START_HANDSHAKE) === 1 && conta(cc.db.commands, CC.START_HANDSHAKE) === 1;
+      cc.a.onDeviceStatus(ST.HANDSHAKE_RX); cc.scambia();
+      return (soloA && entrambi && conta(cc.db.commands, CC.START_HANDSHAKE) === 1) || [soloA, entrambi];
+    });
+
+    t("club: l'handshake sopravvive alla perdita (2 copie su 3 perse)", function () {
+      var cc = coppia();
+      cc.net.drop = { 0: true, 1: true };
+      cc.a.onDeviceStatus(ST.HANDSHAKE_RX); cc.b.onDeviceStatus(ST.HANDSHAKE_RX); cc.scambia();
+      return (conta(cc.da.commands, CC.START_HANDSHAKE) === 1 && conta(cc.db.commands, CC.START_HANDSHAKE) === 1) || cc.da.commands;
+    });
+
+    t("club: LinkConnected di la' -> ConnectLink di qua (mai a freddo)", function () {
+      var cc = coppia();
+      cc.a.onDeviceStatus(ST.HANDSHAKE_RX); cc.b.onDeviceStatus(ST.HANDSHAKE_RX); cc.scambia();
+      cc.a.onDeviceStatus(ST.CONNECTED); cc.scambia();
+      return (conta(cc.db.commands, CC.CONNECT_LINK) === 1 && conta(cc.da.commands, CC.CONNECT_LINK) === 0) || [cc.da.commands, cc.db.commands];
+    });
+
+    t("club: blocchi in ordine nonostante il riordino", function () {
+      var cc = coppia();
+      cc.net.reorder = true;
+      for (var n = 0; n < 6; n++) cc.a.onDeviceBlock(blocco(n));
+      cc.scambia();
+      return blocchiSono(cc.db.blocks, [0, 1, 2, 3, 4, 5]) || cc.db.blocks.length;
+    });
+
+    t("club: blocco perso recuperato con la richiesta (REQ)", function () {
+      var cc = coppia();
+      cc.net.drop = { 1: true };
+      for (var n = 0; n < 4; n++) cc.a.onDeviceBlock(blocco(n));
+      cc.scambia();
+      return (blocchiSono(cc.db.blocks, [0, 1, 2, 3]) && cc.b.richiesti > 0) || [cc.db.blocks.length, cc.b.richiesti];
+    });
+
+    t("club: l'ULTIMO blocco perso lo copre il rilancio periodico", function () {
+      return patchK({ RILANCIO_ULTIMO_S: 0 }, function () {
+        var cc = coppia();
+        cc.net.drop = { 2: true };
+        for (var n = 0; n < 3; n++) cc.a.onDeviceBlock(blocco(n));
+        cc.scambia();
+        var prima = cc.db.blocks.length === 2;
+        cc.a.tick(); cc.scambia();
+        return (prima && blocchiSono(cc.db.blocks, [0, 1, 2]) && cc.a.rilanci > 0) || [prima, cc.db.blocks.length, cc.a.rilanci];
+      });
+    });
+
+    t("club: un residuo PRIMA di AwaitMode non chiude la sessione (campo 2026-08-16)", function () {
+      var cc = coppia();
+      cc.a._avviata = cc.b._avviata = false;
+      cc.a.onDeviceStatus(ST.CLOSED);               // residuo del passthrough
+      cc.scambia();
+      var vive = !cc.a.finita && !cc.b.finita;      // e non e' nemmeno annunciato
+      cc.a.onDeviceStatus(ST.AWAIT_MODE);
+      return (vive && cc.a._avviata && !cc.a.finita) || [cc.a.finita, cc.b.finita];
+    });
+
+    t("club: la riapertura del link rifa' la scala (campo 2026-08-20)", function () {
+      var cc = coppia();
+      cc.giro();
+      var primoGiro = conta(cc.da.commands, CC.START_HANDSHAKE) === 1 && conta(cc.da.commands, CC.CONNECT_LINK) === 1;
+      cc.a.onDeviceStatus(ST.RECONNECTING); cc.b.onDeviceStatus(ST.RECONNECTING); cc.scambia();
+      var giroContato = cc.a.giri === 1;
+      cc.giro();
+      cc.db.blocks.length = 0;
+      cc.a.onDeviceBlock(blocco(1)); cc.scambia();
+      return (primoGiro && giroContato &&
+              conta(cc.da.commands, CC.START_HANDSHAKE) === 2 && conta(cc.db.commands, CC.START_HANDSHAKE) === 2 &&
+              conta(cc.da.commands, CC.CONNECT_LINK) === 2 && conta(cc.db.commands, CC.CONNECT_LINK) === 2 &&
+              blocchiSono(cc.db.blocks, [1])) || [primoGiro, giroContato, cc.da.commands];
+    });
+
+    t("club: niente comandi fra una sezione e l'altra (puntatore nullo sul Pico)", function () {
+      var cc = coppia();
+      cc.giro();
+      cc.a.onDeviceStatus(ST.RECONNECTING);
+      var prima = cc.da.commands.length;
+      cc.b.onDeviceStatus(ST.RECONNECTING); cc.b.onDeviceStatus(ST.HANDSHAKE_RX); cc.b.onDeviceStatus(ST.CONNECTED);
+      cc.scambia();
+      var zitti = cc.da.commands.length === prima;
+      cc.a.onDeviceStatus(ST.HANDSHAKE_RX);
+      var nuovi = cc.da.commands.slice(prima);
+      return (zitti && nuovi.length === 2 && nuovi[0] === CC.START_HANDSHAKE && nuovi[1] === CC.CONNECT_LINK) || [zitti, nuovi];
+    });
+
+    t("club: ConnectLink distanziato da StartHandshake (la sezione appesa del campo 2026-08-27)", function () {
+      // Il firmware trasmette la parola di slave solo FRA StartHandshake e
+      // ConnectLink: i due comandi nello stesso istante bruciano il gradino e
+      // `cavo collegato` non arriva mai. Qui il partner (come l'emulatore)
+      // annuncia handshake e collegato insieme: il ConnectLink deve aspettare.
+      var vecchio = C.K.CONNECT_RITARDO_S;
+      C.K.CONNECT_RITARDO_S = 0.05;
+      var cc = coppia();   // coppia() azzera il ritardo: lo rimetto
+      C.K.CONNECT_RITARDO_S = 0.05;
+      cc.a.onNetStatus(0x77, 1, ST.HANDSHAKE_RX);
+      cc.a.onNetStatus(0x77, 2, ST.CONNECTED);
+      cc.a.onDeviceStatus(ST.HANDSHAKE_RX);
+      var subito = cc.da.commands.indexOf(CC.CONNECT_LINK) < 0 &&
+                   cc.da.commands.indexOf(CC.START_HANDSHAKE) >= 0;
+      cc.a.tick();
+      var alTick = cc.da.commands.indexOf(CC.CONNECT_LINK) < 0;
+      // passato il ritardo (senza aspettare davvero), il tick lo manda
+      cc.a._hsQuando -= 1;
+      cc.a.tick();
+      var dopo = cc.da.commands.indexOf(CC.CONNECT_LINK) >= 0;
+      C.K.CONNECT_RITARDO_S = vecchio;
+      return (subito && alTick && dopo) || [subito, alTick, dopo];
+    });
+
+    t("club: l'amico esce dalla porta -> si accompagna fuori il gioco, non si stacca", function () {
+      // Staccare qui lascia il nostro gioco dentro la coreografia d'uscita
+      // senza partner: schermata nera e riavvio (campo 2026-08-27).
+      var cc = coppia();
+      cc.giro();
+      cc.da.blocks.length = 0;
+      cc.a.onNetLeave(cc.a.epocaPartner);
+      var nonStaccato = (cc.a.finita === false && cc.a.congedo === true);
+      // al device e' andata la PORTA
+      var p = cc.da.blocks[cc.da.blocks.length - 1] || [];
+      var porta = (p[0] | (p[1] << 8)) === 0xCAFE && (p[2] | (p[3] << 8)) === 0x17;
+      // il gioco chiede di chiudere: gli si risponde di si'
+      var req = new Uint8Array(64); req[0] = 0xFF; req[1] = 0x5F;
+      cc.a.onDeviceBlock(req);
+      var e = cc.da.blocks[cc.da.blocks.length - 1] || [];
+      var eco = (e[0] | (e[1] << 8)) === 0x5FFF;
+      // e a "link chiuso" la sessione finisce PULITA (non abortita)
+      cc.a.onDeviceStatus(ST.CLOSED);
+      var pulita = cc.a.finita === true && !cc.a.abortita;
+      return (nonStaccato && porta && eco && pulita) || [nonStaccato, porta, eco, pulita];
+    });
+
+    t("club: il congedo ha un tetto (il gioco non chiude -> si stacca comunque)", function () {
+      var cc = coppia();
+      cc.giro();
+      cc.a.onNetLeave(cc.a.epocaPartner);
+      var vivo = cc.a.finita === false;
+      cc.a.congedoDa -= (C.K.CONGEDO_MAX_S + 1);   // il tempo e' passato
+      cc.a.tick();
+      return (vivo && cc.a.finita === true && cc.a.abortita === true) || [vivo, cc.a.finita, cc.a.abortita];
+    });
+
+    t("club: i blocchi fra due sezioni si tengono da parte e si consegnano in ordine", function () {
+      var cc = coppia();
+      cc.giro();
+      cc.a.onDeviceStatus(ST.RECONNECTING);
+      cc.da.blocks.length = 0;
+      cc.b.onDeviceBlock(blocco(7)); cc.scambia();
+      var trattenuto = cc.da.blocks.length === 0;
+      cc.b.onDeviceBlock(blocco(8)); cc.scambia();
+      // L'handshake NON basta: i blocchi spinti nel device prima di `cavo
+      // collegato` cadono nel vuoto (campo 2026-08-27, GBA vs emulatore:
+      // 7 blocchi persi e il GBA appeso ad "attendi" per sempre).
+      cc.a.onDeviceStatus(ST.HANDSHAKE_RX);
+      var ancoraTrattenuto = cc.da.blocks.length === 0;
+      cc.a.onDeviceStatus(ST.CONNECTED);
+      return (trattenuto && ancoraTrattenuto && blocchiSono(cc.da.blocks, [7, 8]) && cc.a.blocchiTenuti === 2 && cc.a.blocchiPersiDev === 0) || [trattenuto, ancoraTrattenuto, cc.da.blocks.length];
+    });
+
+    t("club: la riconnessione del PARTNER non ci fa ricominciare (la decide il nostro device)", function () {
+      var cc = coppia();
+      cc.giro();
+      cc.a.onNetStatus(cc.a.epocaPartner, 900, ST.RECONNECTING);
+      return (cc.a.giri === 0 && cc.a._sezioneViva === true) || cc.a.giri;
+    });
+
+    t("club: la riapertura riparte anche se il partner e' gia' avanti", function () {
+      var cc = coppia();
+      cc.giro();
+      cc.a.onDeviceStatus(ST.RECONNECTING);
+      cc.b.onDeviceStatus(ST.RECONNECTING); cc.b.onDeviceStatus(ST.HANDSHAKE_RX); cc.b.onDeviceStatus(ST.CONNECTED);
+      cc.scambia();
+      cc.a.onDeviceStatus(ST.HANDSHAKE_RX); cc.scambia();
+      return (conta(cc.da.commands, CC.START_HANDSHAKE) === 2 && conta(cc.da.commands, CC.CONNECT_LINK) === 2) || cc.da.commands;
+    });
+
+    // --- il link chiuso SENZA riapertura: il caso del 2026-08-27 -------------
+
+    t("club: link chiuso senza riapertura -> la sessione muore (frullatore/annullo, campo 2026-08-27)", function () {
+      return patchK({ RIAPERTURA_S: -1 }, function () {
+        var cc = coppia();
+        cc.giro();
+        cc.a.onDeviceStatus(ST.RECONNECTING); cc.b.onDeviceStatus(ST.RECONNECTING);
+        cc.scambia();
+        cc.a.tick();
+        return (cc.a.finita && cc.a.abortita && cc.a.motivoFine === "link chiuso senza riapertura") || cc.a.motivoFine;
+      });
+    });
+
+    t("club: la riapertura COMPLETATA spegne il timer (macchina degli scambi)", function () {
+      return patchK({ RIAPERTURA_S: -1 }, function () {
+        var cc = coppia();
+        cc.giro();
+        cc.a.onDeviceStatus(ST.RECONNECTING); cc.b.onDeviceStatus(ST.RECONNECTING);
+        cc.scambia();
+        cc.giro();                 // la scala nuova, completa sui due lati
+        cc.a.tick(); cc.b.tick();
+        return (!cc.a.finita && !cc.b.finita) || [cc.a.motivoFine, cc.b.motivoFine];
+      });
+    });
+
+    t("club: meta' scala non spegne il timer (un lato riprova al bancone da solo)", function () {
+      return patchK({ RIAPERTURA_S: -1 }, function () {
+        var cc = coppia();
+        cc.giro();
+        cc.a.onDeviceStatus(ST.RECONNECTING); cc.b.onDeviceStatus(ST.RECONNECTING);
+        cc.a.onDeviceStatus(ST.HANDSHAKE_RX);
+        cc.a.onDeviceStatus(ST.CONNECTED);   // solo il MIO lato
+        cc.a.tick();
+        return (cc.a.finita && cc.a.motivoFine === "link chiuso senza riapertura") || cc.a.motivoFine;
+      });
+    });
+
+    t("club: un riannuncio IDENTICO non e' progresso (il watchdog conta le novita')", function () {
+      var cc = coppia();
+      cc.a.onNetStatus(0x1234, 0, ST.HANDSHAKE_RX);
+      cc.a._progresso = 0;
+      cc.a.onNetStatus(0x1234, 1, ST.HANDSHAKE_RX);    // riannuncio
+      var fermo = cc.a._progresso === 0;
+      cc.a.onNetStatus(0x1234, 2, ST.CONNECTED);       // novita'
+      return (fermo && cc.a._progresso > 0) || [fermo, cc.a._progresso];
+    });
+
+    t("club: l'epoca viaggia in OGNI corpo", function () {
+      var cc = coppia();
+      cc.a.onDeviceStatus(ST.HANDSHAKE_RX);
+      cc.a.onDeviceBlock(blocco(0));
+      for (var i = 0; i < cc.net.aToB.length; i++) {
+        var p = CP.clubUnpack(cc.net.aToB[i]);
+        if (!p || p.epoca !== cc.a.epoca) return "corpo " + i + " senza epoca giusta";
+      }
+      return cc.net.aToB.length > 0 || "nessun corpo";
+    });
+
+    t("club: il riavvio del partner viene riagganciato in corsa (epoche, campo 2026-08-19)", function () {
+      return patchK({ ANNUNCIO_S: 0 }, function () {
+        var cc = coppia();
+        cc.a.onDeviceStatus(ST.HANDSHAKE_RX); cc.b.onDeviceStatus(ST.HANDSHAKE_RX); cc.scambia();
+        for (var n = 0; n < 3; n++) cc.a.onDeviceBlock(blocco(n));
+        cc.scambia();
+        var prima = cc.db.blocks.length === 3;
+        // il client di B muore e rinasce: sessione NUOVA, epoca nuova
+        cc.db = fdev();
+        cc.b = new C.ClubSession({ myPeer: 2, dev: cc.db, sendNet: cc.net.sender("b"), log: function () {} });
+        cc.b._avviata = true; cc.b._sezioneViva = true;
+        cc.scambia = function () { for (var i = 0; i < 4; i++) { cc.net.consegna(cc.b, cc.net.aToB); cc.net.consegna(cc.a, cc.net.bToA); } };
+        cc.b.onDeviceStatus(ST.HANDSHAKE_RX); cc.scambia();
+        var riavvisto = cc.a.partnerRiavvii === 1;
+        cc.a.tick(); cc.scambia();
+        var ladder = conta(cc.db.commands, CC.START_HANDSHAKE) === 1;
+        // dal 2026-08-27 il cancello dei blocchi e' `cavo collegato`
+        cc.b.onDeviceStatus(ST.CONNECTED); cc.scambia();
+        cc.a.onDeviceBlock(blocco(3)); cc.scambia(); cc.scambia();
+        return (prima && riavvisto && ladder && blocchiSono(cc.db.blocks, [0, 1, 2, 3])) || [prima, riavvisto, ladder, cc.db.blocks.length];
+      });
+    });
+
+    t("club: i pacchetti delle epoche morte si scartano (niente ping-pong)", function () {
+      var cc = coppia();
+      cc.a.onNetStatus(0x1111, 0, ST.HANDSHAKE_RX);
+      cc.a.onNetStatus(0x2222, 0, ST.HANDSHAKE_RX);
+      var riavvii = cc.a.partnerRiavvii === 1;
+      cc.a.onNetBlock(0x1111, 99, blocco(99));
+      var scarto = cc.a.epocaScarti === 1 && cc.a.blocchiRx === 0 && cc.da.blocks.length === 0;
+      cc.a.onNetLeave(0x1111);
+      return (riavvii && scarto && !cc.a.finita) || [riavvii, cc.a.epocaScarti, cc.a.finita];
+    });
+
+    t("club: aggancio a una sessione gia' vecchia -> si adotta la numerazione", function () {
+      var cc = coppia();
+      cc.a._txSeq = 700;
+      for (var n = 0; n < 3; n++) cc.a.onDeviceBlock(blocco(n));
+      cc.scambia();
+      return (cc.b.saltiNumerazione === 1 && blocchiSono(cc.db.blocks, [0, 1, 2]) && cc.b.richiesti === 0) || [cc.b.saltiNumerazione, cc.db.blocks.length, cc.b.richiesti];
+    });
+
+    t("club: l'ENTER si riannuncia finche' il partner non si fa vivo, poi tace", function () {
+      return patchK({ ANNUNCIO_S: 0 }, function () {
+        var cc = coppia();
+        cc.a.tick(); cc.a.tick();
+        var enter = 0;
+        for (var i = 0; i < cc.net.aToB.length; i++) { var p = CP.clubUnpack(cc.net.aToB[i]); if (p && p.sub === CP.CLUB_ENTER) enter++; }
+        var ripetuto = enter >= 2;
+        cc.a.notaPartner(0x1234);
+        cc.net.aToB.length = 0;
+        cc.a.tick();
+        var dopo = 0;
+        for (var j = 0; j < cc.net.aToB.length; j++) { var q = CP.clubUnpack(cc.net.aToB[j]); if (q && q.sub === CP.CLUB_ENTER) dopo++; }
+        return (ripetuto && dopo === 0) || [enter, dopo];
+      });
+    });
+
+    t("club: il club FANTASMA muore da solo (nessun GBA al bancone)", function () {
+      return patchK({ FANTASMA_S: -1 }, function () {
+        var cc = coppia();
+        cc.a.tick();
+        return (cc.a.finita && cc.a.motivoFine === "fantasma") || cc.a.motivoFine;
+      });
+    });
+
+    t("club: basta UN handshake (di qua O di la') per non essere un fantasma", function () {
+      return patchK({ FANTASMA_S: -1, PARTNER_MUTO_S: 9999 }, function () {
+        var cc = coppia();
+        cc.a.onDeviceStatus(ST.HANDSHAKE_RX);
+        cc.a.tick();
+        cc.b.onNetStatus(0x1234, 0, ST.HANDSHAKE_RX);
+        cc.b.tick();
+        return (!cc.a.finita && !cc.b.finita) || [cc.a.motivoFine, cc.b.motivoFine];
+      });
+    });
+
+    t("club: il partner MUTO chiude la sessione (niente zombie)", function () {
+      return patchK({ PARTNER_MUTO_S: -1 }, function () {
+        var cc = coppia();
+        cc.a.tick();
+        return (cc.a.finita && cc.a.abortita && cc.a.motivoFine === "partner muto") || cc.a.motivoFine;
+      });
+    });
+
+    t("club: un dup NON e' progresso (non tocca il watchdog)", function () {
+      var cc = coppia();
+      cc.a.onNetBlock(0x1234, 0, blocco(0));
+      cc.a._progresso = 0;
+      cc.a.onNetBlock(0x1234, 0, blocco(0));
+      return (cc.a.duplicati === 1 && cc.a._progresso === 0) || [cc.a.duplicati, cc.a._progresso];
+    });
+
+    t("club: gli stati riannunciati non duplicano il ConnectLink", function () {
+      var cc = coppia();
+      cc.a.onDeviceStatus(ST.HANDSHAKE_RX);
+      cc.a.onNetStatus(0x1234, 0, ST.HANDSHAKE_RX);
+      cc.a.onNetStatus(0x1234, 1, ST.CONNECTED);
+      cc.a.onNetStatus(0x1234, 2, ST.CONNECTED);
+      return conta(cc.da.commands, CC.CONNECT_LINK) === 1 || cc.da.commands;
+    });
+
+    t("club: chiusura da ENTRAMBI i lati, vista da tutti e due", function () {
+      var cc = coppia();
+      cc.a.onDeviceStatus(ST.CLOSED); cc.scambia();
+      var aperta = !cc.a.finita && !cc.b.finita;
+      cc.b.onDeviceStatus(ST.CLOSED); cc.scambia();
+      var bChiusa = cc.b.finita;
+      cc.scambia();
+      return (aperta && bChiusa && cc.a.finita) || [aperta, cc.b.finita, cc.a.finita];
+    });
+
+    // --- il protocollo sul filo: byte per byte come net/protocol.py ---------
+    t("club: CLUB_STATUS porta versione e impronta in CODA, e l'unpack le legge", function () {
+      var b = CP.clubStatus(0xDEADBEEF, 7, ST.CONNECTED);
+      var p = CP.clubUnpack(b);
+      var corto = CP.clubUnpack(b.subarray(0, 9));   // client vecchio: solo i primi 9 byte
+      return (b.length === 15 && b[0] === 1 && p.epoca === 0xDEADBEEF && p.sseq === 7 && p.status === ST.CONNECTED &&
+              p.versione === C.VERSIONE_CLUB && p.impronta === C.IMPRONTA_WEB &&
+              corto && corto.versione === 0 && corto.impronta === 0) || p;
+    });
+    t("club: DATA e REQ fanno il giro pack -> unpack senza perdere niente", function () {
+      var d = CP.clubUnpack(CP.clubData(0x12345678, 42, blocco(9)));
+      var r = CP.clubUnpack(CP.clubReq(0x12345678, [1, 2, 300]));
+      var e2 = CP.clubUnpack(CP.clubEnter(5)), l = CP.clubUnpack(CP.clubLeave(6));
+      var rotto = CP.clubUnpack(new Uint8Array(3));
+      return (d.seq === 42 && bloccoEq(d.block, blocco(9)) && eq(r.seqs, [1, 2, 300]) &&
+              e2.sub === CP.CLUB_ENTER && e2.epoca === 5 && l.sub === CP.CLUB_LEAVE && l.epoca === 6 &&
+              rotto === null) || [d.seq, r.seqs];
+    });
+
+    // --- l'orchestrazione nel bridge (specchio di client.py) ----------------
+    function devClubFinto() {
+      return {
+        clubEntrato: 0, clubUscito: 0, comandi: [], blocchi: [],
+        onClubStatus: function () {}, onClubBlock: function () {},
+        clubEnter: function () { this.clubEntrato++; return Promise.resolve(true); },
+        clubExit: function () { this.clubUscito++; return Promise.resolve(); },
+        clubCommand: function (c) { this.comandi.push(c); return Promise.resolve(); },
+        clubSendBlock: function (b) { this.blocchi.push(new Uint8Array(b)); return Promise.resolve(true); },
+        sendEvent: function () { return Promise.resolve(); }
+      };
+    }
+    function bridgeClub(peerId) {
+      var d = devClubFinto();
+      var b = new OwlBridge({ peerId: peerId || 1, room: 7, device: d, log: function () {} });
+      var mandati = [];
+      b.sendRelay = function (bytes) { mandati.push(OwlRelay.unpack(bytes)); return true; };
+      b.mandati = mandati;
+      b.dev = d;
+      return b;
+    }
+
+    t("bridge+club: dopo il club il filo verso il GBA resta MUTO finche' il GBA non riparla", function () {
+      // Il gioco puo' essere ancora alla schermata del club col link aperto:
+      // i frame di camminata scritti li' sono spazzatura nei blocchi del link
+      // ("ALLENATORI di un'altra regione", campo 2026-08-27). Fino al primo
+      // evento VALIDO dal GBA non si scrive.
+      var d = devClubFinto();
+      var scritti = 0;
+      d.sendEvent = function () { scritti++; return Promise.resolve(); };
+      var g = bridgeClub(1);
+      g.device = d; g.dev = d;
+      g.onDeviceEvent(ev(7, 0, 0, 0));            // il club si apre...
+      var sess = g.club;
+      sess.finita = true; sess.abortita = true;
+      g.clubEnd();                                 // ...e muore
+      g.deliver(ev(1, 0, 5, 5), 1);                // un passo dell'amico: TRATTENUTO
+      var muto = scritti === 0 && g.gbaMuto === true && g.gbaMutoScartati > 0;
+      g.clubRiagganciofino = 0;                    // fuori quarantena per il test
+      g.onDeviceEvent(ev(2, 0, 3, 3));             // il GBA riparla (un GIRA)
+      g.deliver(ev(1, 0, 6, 6), 1);                // ora il passo passa
+      var riparte = scritti > 0 && g.gbaMuto === false;
+      return (muto && riparte) || [muto, riparte, scritti];
+    });
+
+    t("bridge+club: EV_CLUB -> sessione avviata, ENTER sul relay, Pico in modo LINK", function () {
+      var g = bridgeClub(1);
+      g.onDeviceEvent(ev(7, 0, 0, 0));
+      g.onDeviceEvent(ev(7, 0, 0, 0));            // le 3 copie: idempotente
+      var enter = g.mandati.filter(function (m) { return m.kind === OwlRelay.T.CLUB && CP.clubUnpack(m.body).sub === CP.CLUB_ENTER; });
+      var esito = (g.club !== null && g.clubSessions === 1 && g.dev.clubEntrato === 1 && enter.length === 1) || [!!g.club, g.clubSessions, g.dev.clubEntrato, enter.length];
+      g.club.finita = true; g.club.abortita = true; g.clubEnd();
+      return esito;
+    });
+
+    t("bridge+club: il partner si legge dall'header del primo T_CLUB e sblocca il ruolo", function () {
+      var g = bridgeClub(47000);
+      g.onDeviceEvent(ev(7, 0, 0, 0));
+      var sess = g.club;
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 51000, 7, 1, CP.clubEnter(0x1234)));
+      var agganciato = g.clubPartner === 51000 && sess.partnerPeer === 51000 && sess.epocaPartner === 0x1234;
+      g.dev.onClubStatus(ST.AWAIT_MODE);          // adesso il ruolo si decide: 47000 < 51000
+      var esito = (agganciato && conta(g.dev.comandi, CC.SET_MODE_MASTER) === 1 && sess.master === true) || [agganciato, g.dev.comandi];
+      sess.finita = true; sess.abortita = true; g.clubEnd();
+      return esito;
+    });
+
+    t("bridge+club: ENTER dell'amico apre la sessione anche senza EV_CLUB nostro", function () {
+      var g = bridgeClub(2);
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 1, CP.clubEnter(0x77)));
+      var esito = (g.club !== null && g.clubPartner === 555) || [!!g.club, g.clubPartner];
+      g.club.finita = true; g.club.abortita = true; g.clubEnd();
+      return esito;
+    });
+
+    t("bridge+club: un TERZO peer che parla di club viene ignorato (il club e' a due)", function () {
+      var g = bridgeClub(1);
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 1, CP.clubEnter(0x77)));
+      var sess = g.club;
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 777, 7, 1, CP.clubEnter(0x99)));
+      var esito = (g.clubAltrui === 1 && g.clubPartner === 555 && sess.epocaPartner === 0x77) || [g.clubAltrui, g.clubPartner];
+      sess.finita = true; sess.abortita = true; g.clubEnd();
+      return esito;
+    });
+
+    t("bridge+club: LEAVE dell'amico chiude, il Pico torna in passthrough e scatta la quarantena", function () {
+      var g = bridgeClub(1);
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 1, CP.clubEnter(0x77)));
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 2, CP.clubLeave(0x77)));
+      var chiuso = g.club === null && g.dev.clubUscito === 1 && g.clubPartner === null;
+      var leave = g.mandati.filter(function (m) { return m.kind === OwlRelay.T.CLUB && CP.clubUnpack(m.body).sub === CP.CLUB_LEAVE; });
+      g.onDeviceEvent(ev(7, 0, 0, 0));            // EV_CLUB subito dopo: stantio
+      return (chiuso && leave.length === 1 && g.club === null && g.clubStantii === 1) || [chiuso, leave.length, g.clubStantii];
+    });
+
+    t("bridge+club: durante il club la camminata verso il GBA si butta e si conta", function () {
+      var g = bridgeClub(1);
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 1, CP.clubEnter(0x77)));
+      g.deliver(ev(1, 4, 11, 16), 0);
+      // copie x2 -> DUE scarti: il drop sta in _deliverOne, dopo la decisione
+      // sulle copie, esattamente come in client.py.
+      var esito = (g.clubDrop === 2 && g.wireSent === 2) || [g.clubDrop, g.wireSent];
+      g.club.finita = true; g.club.abortita = true; g.clubEnd();
+      return esito;
+    });
+
+    t("bridge+club: la versione dell'altra parte si controlla e si dice UNA volta", function () {
+      var righe = [];
+      var g = bridgeClub(1);
+      g.log = function (r) { righe.push(String(r)); };
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 1, CP.clubEnter(0x77)));
+      var sess = g.club;
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 2, CP.clubStatus(0x77, 0, ST.AWAIT_MODE, 2, 0x1234)));
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 3, CP.clubStatus(0x77, 1, ST.AWAIT_MODE, 2, 0x1234)));
+      var urla = righe.filter(function (r) { return r.indexOf("VERSIONI DIVERSE") >= 0; });
+      sess.finita = true; sess.abortita = true; g.clubEnd();
+      return (urla.length === 1 && g.clubVersioneDetta) || urla.length;
+    });
+
+    t("bridge+club: l'amico in EMULATORE si riconosce (impronta LUA1)", function () {
+      // Col Brick dell'amico questo e' il caso NORMALE: se il sito non
+      // riconoscesse l'impronta del Lua direbbe "pannello Python", che e'
+      // falso, o peggio urlerebbe al pacchetto vecchio.
+      var righe = [];
+      var g = bridgeClub(1);
+      g.log = function (r) { righe.push(String(r)); };
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 1, CP.clubEnter(0x77)));
+      var sess = g.club;
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 2,
+        CP.clubStatus(0x77, 0, ST.AWAIT_MODE, OwlClub.VERSIONE_CLUB, OwlClub.IMPRONTA_LUA)));
+      var dette = righe.filter(function (r) { return r.indexOf("in EMULATORE") >= 0; });
+      var urla = righe.filter(function (r) { return r.indexOf("DIVERSE") >= 0; });
+      sess.finita = true; sess.abortita = true; g.clubEnd();
+      return (dette.length === 1 && urla.length === 0) || [dette.length, urla.length];
+    });
+
+    t("bridge+club: da SPETTATORE il club si ignora e si dice una volta", function () {
+      var d = devClubFinto();
+      var g = new OwlBridge({ peerId: 9, room: 7, device: d, spettatore: true, log: function () {} });
+      g.sendRelay = function () { return true; };
+      g.onRelayMessage(OwlRelay.pack(OwlRelay.T.CLUB, 555, 7, 1, CP.clubEnter(0x77)));
+      return (g.club === null && g.clubSessions === -1 && d.clubEntrato === 0) || [g.clubSessions, d.clubEntrato];
+    });
+  })();
+
+  /* --- IL PICO STACCATO (2026-08-30) ------------------------------------
+   *
+   * Il difetto del campo: staccando l'adattatore, il sito non se ne
+   * accorgeva e il battito continuava a ripubblicare la fotografia della
+   * presenza. L'amico vedeva il nostro avatar comparire (alla riapertura del
+   * WebSocket) e sparire (al timeout del relay) ogni ~30 secondi, per dieci
+   * minuti. Il gate della presenza era «il GBA tace da 2 s» - condizione che
+   * un adattatore staccato soddisfa PER SEMPRE.
+   *
+   * Le tre prove sono i tre pezzi della cura, e la seconda e' quella che
+   * conta: senza, si torna esattamente al difetto.
+   */
+  (function () {
+    function bridgeConDevice(dev) {
+      var b = new OwlBridge({ peerId: 1, room: 7, device: dev, log: function () {} });
+      b.mandati = [];
+      b.sendRelay = function (bytes) { b.mandati.push(OwlRelay.unpack(bytes)); return true; };
+      return b;
+    }
+
+    t("pico staccato: la presenza NON riparte piu' (era il motore del va-e-vieni)", function () {
+      var dev = { perso: false, sendEvent: function () { return Promise.resolve(); } };
+      var b = bridgeConDevice(dev);
+      b.ricordaPresenza(ev(2, 4, 10, 16));
+      b.rimandaPresenza(true);                     // adattatore vivo: parte
+      var vive = b.presenzeRimandate;
+      dev.perso = true;                            // ...e adesso non c'e' piu'
+      b.rimandaPresenza(true);
+      b.rimandaPresenza(true);
+      return (vive === 1 && b.presenzeRimandate === 1 && b.presenzeSoppresse === 2)
+        || { vive: vive, rimandate: b.presenzeRimandate, soppresse: b.presenzeSoppresse };
+    });
+
+    t("pico staccato: parte un congedo VERO (T_BYE), non si sparisce tacendo", function () {
+      var dev = { perso: true, sendEvent: function () { return Promise.resolve(); } };
+      var b = bridgeConDevice(dev);
+      b.ricordaPresenza(ev(2, 4, 10, 16));
+      b.congeda("prova");
+      b.congeda("prova");                          // una volta sola
+      var bye = b.mandati.filter(function (m) { return m && m.kind === OwlRelay.T.BYE; });
+      // e la fotografia sparisce: nessuna strada puo' piu' resuscitarci
+      b.rimandaPresenza(true);
+      return (bye.length === 1 && b.lastEvent === null && b.presenzeRimandate === 0)
+        || { bye: bye.length, lastEvent: b.lastEvent, rimandate: b.presenzeRimandate };
+    });
+
+    t("pico ricollegato: la presenza riprende (il gate non resta chiuso per sempre)", function () {
+      var morto = { perso: true, sendEvent: function () { return Promise.resolve(); } };
+      var vivo = { perso: false, sendEvent: function () { return Promise.resolve(); } };
+      var b = bridgeConDevice(morto);
+      b.ricordaPresenza(ev(2, 4, 10, 16));
+      b.rimandaPresenza(true);                     // soppressa
+      b.cambiaDevice(vivo);
+      b.ricordaPresenza(ev(2, 4, 11, 16));         // il GBA riparla
+      b.rimandaPresenza(true);
+      return (b.presenzeSoppresse === 1 && b.presenzeRimandate === 1 && b.congedato === false)
+        || { soppresse: b.presenzeSoppresse, rimandate: b.presenzeRimandate, congedato: b.congedato };
+    });
+
+    t("spettatore: nessun device, la presenza deve restare LIBERA di partire", function () {
+      // Chi guarda dal sito gioca in emulatore: la sua sorgente non e' il
+      // Pico. Se il gate nuovo lo prendesse per un adattatore morto, gli
+      // spettatori sparirebbero dalla mappa - una regressione peggiore del
+      // difetto che si sta curando.
+      var b = new OwlBridge({ peerId: 9, room: 7, device: null, spettatore: true, log: function () {} });
+      b.mandati = [];
+      b.sendRelay = function (bytes) { b.mandati.push(OwlRelay.unpack(bytes)); return true; };
+      b.ricordaPresenza(ev(2, 4, 10, 16));
+      b.rimandaPresenza(true);
+      return (b.presenzeRimandate === 1 && b.presenzeSoppresse === 0)
+        || { rimandate: b.presenzeRimandate, soppresse: b.presenzeSoppresse };
+    });
+  })();
+
+  t("normalizzaUrl: host:porta -> ws://, https -> wss", function () {
+    var a = OwlRelay.normalizzaUrl("127.0.0.1:9001"), b = OwlRelay.normalizzaUrl("https://relay.esempio.it/ws"), c = OwlRelay.normalizzaUrl("wss://x/y");
+    return ((a === "ws://127.0.0.1:9001" || a === "wss://127.0.0.1:9001") && b === "wss://relay.esempio.it/ws" && c === "wss://x/y") || [a, b, c];
+  });
+
+  function stampa(extra) {
+    document.getElementById("out").innerHTML = out.join("\n") + (extra || "") + "\n\nRISULTATO: " + ok + " ok, " + ko + " ko" + (ko ? "  <span class=ko>FALLITO</span>" : "  <span class=ok>TUTTO VERDE</span>");
+    window.__risultato = { ok: ok, ko: ko };
+  }
+
+  // --- prova INTEGRATA (solo con ?relay=...): due bridge veri attraverso relay_ws.py + relay.py ---
+  var relayUrl = new URLSearchParams(location.search).get("relay");
+  if (!relayUrl) { stampa(); return; }
+  out.push("\n<span class=nota>prova integrata con " + relayUrl + " ...</span>");
+  stampa();
+  var stanza = 777 + Math.floor(Math.random() * 1000);
+  var ricevutiB = [], ricevutiA = [];
+  var A = new OwlBridge({ peerId: 1001, room: stanza, copies: 2, device: { sendEvent: function (e) { ricevutiA.push(new Uint8Array(e)); return Promise.resolve(); } }, log: function () {} });
+  var B = new OwlBridge({ peerId: 1002, room: stanza, copies: 2, device: { sendEvent: function (e) { ricevutiB.push(new Uint8Array(e)); return Promise.resolve(); } }, log: function () {} });
+  var aperti = 0;
+  function collega(br) {
+    var l = new OwlRelay.RelayLink(OwlRelay.normalizzaUrl(relayUrl) + "?stanza=" + stanza, {
+      onMessage: function (b) { br.onRelayMessage(b); },
+      onOpen: function () { br.sendHello(); aperti++; },
+      log: function () {}
+    });
+    br.link = l; l.connect();
+  }
+  collega(A); collega(B);
+  var fine = Date.now() + 6000;
+  var fase = 0;
+  var timer = setInterval(function () {
+    if (fase === 0 && aperti === 2) {
+      fase = 1;
+      A.sendPing(); B.sendPing();
+      A.onDeviceEvent(ev(2, 4, 10, 16, 2, 40));        // SYNC
+      A.onDeviceEvent(ev(1, 4, 12, 16, 2, 42));        // PASSO a due tile: B deve RICUCIRE
+      A.onDeviceEvent(ev(5, 1, 12, 16, 2, 43));        // STATO lotta
+      B.onDeviceEvent(ev(2, 1, 5, 5, 2, 1));
+      return;
+    }
+    if (fase === 1 && (ricevutiB.length >= 7 && ricevutiA.length >= 2)) {
+      fase = 2;
+      var d = dedupPayload(ricevutiB).map(descr);
+      t("INTEGRATA: A -> relay_ws -> relay -> relay_ws -> B, ricucito e con le copie", function () {
+        // SYNC(1) + 2 passi x2 copie (ricucito 11 + vero 12) + STATO(1) = 6 frame, piu' la
+        // PRESENZA che A rimanda quando vede il primo evento di B (bridge.js:319, feature del
+        // 2026-08-28): un SYNC dell'ultima posizione di A, (12,16). Sette frame, dedup -> 5
+        // eventi, `received` 4 (il passo ricucito lo sintetizza B, non arriva dalla rete).
+        // Fino al 2026-08-29 qui c'erano i numeri di PRIMA della presenza, e questa prova era
+        // rossa sul sito pubblicato senza che niente fosse rotto.
+        return (eq(d, [[2, 4, 10, 16], [1, 4, 11, 16], [1, 4, 12, 16], [5, 1, 12, 16], [2, 4, 12, 16]])
+          && B.healed === 1 && B.received === 4) || { d: d, healed: B.healed, received: B.received, frames: ricevutiB.length };
+      });
+      t("INTEGRATA: B -> A (verso opposto)", function () { return (eq(descr(ricevutiA[0]), [2, 1, 5, 5]) && A.received === 2) || { primo: descr(ricevutiA[0]), received: A.received }; });
+      // La presenza, guardata dal lato di chi la riceve: il secondo frame che arriva ad A e' la
+      // fotografia che B rimanda perche' ha appena visto A. E' un SYNC (mai un PASSO: rimandare
+      // un passo farebbe camminare l'avatar una seconda volta) e sta sull'ultima posizione di B.
+      t("INTEGRATA: la presenza rimandata arriva a chi entra (SYNC, non PASSO)", function () {
+        return (eq(descr(ricevutiA[1]), [2, 1, 5, 5]) && B.presenzeRimandate >= 1 && A.presenzeRimandate >= 1)
+          || { secondo: ricevutiA[1] ? descr(ricevutiA[1]) : null, presenzeB: B.presenzeRimandate, presenzeA: A.presenzeRimandate };
+      });
+      t("INTEGRATA: i PONG tornano (RTT misurato)", function () { return (A.rtts.length >= 1 && B.rtts.length >= 1) || [A.rtts.length, B.rtts.length]; });
+      A.link.close();                                     // A chiude: B deve ricevere il VIA
+      return;
+    }
+    if (fase === 2) {
+      var ultimo = ricevutiB[ricevutiB.length - 1];
+      if (ultimo && ultimo[0] === 4) {
+        fase = 3;
+        t("INTEGRATA: A chiude la pagina -> B riceve il VIA (tipo 4) entro 2 s", function () { return (ultimo[5] === 2 && B.leaves === 1) || descr(ultimo); });
+        clearInterval(timer); B.link.close(); stampa();
+        return;
+      }
+    }
+    if (Date.now() > fine) {
+      clearInterval(timer);
+      t("INTEGRATA: completata entro 6 s (fase " + fase + ", B ha " + ricevutiB.length + " frame, A " + ricevutiA.length + ", aperti " + aperti + ")", function () { return fase === 3 || "relay non raggiungibile o lento"; });
+      try { A.link.close(); B.link.close(); } catch (e) { /* niente */ }
+      stampa();
+    }
+  }, 100);
+})();
+</script>
+</body>
+</html>

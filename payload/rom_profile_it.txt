@@ -1,0 +1,6 @@
+# GENERATO DA tools/port_syms.py - profilo della ROM per mgba/inject_body.lua.
+# BPEI, sha1 1692db322400c3141c5de2db38469913ceb1f4d4
+GAMECODE=BPEI
+CB2_OVERWORLD=0x08085E70
+CB2_WORD=0x4809B510
+CB1_OVERWORLD=0x08085E19

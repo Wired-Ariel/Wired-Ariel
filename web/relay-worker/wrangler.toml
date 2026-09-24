@@ -1,0 +1,17 @@
+# wrangler.toml - il relay su Cloudflare Workers (vedi worker.js e web/README.md)
+#
+# Uso (una volta: `npm i -g wrangler`, poi `wrangler login`):
+#   wrangler dev            # prova in locale: ws://127.0.0.1:8787/ws?stanza=1
+#   wrangler deploy         # pubblica: wss://passotile-relay.<account>.workers.dev/ws?stanza=N
+name = "passotile-relay"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# Le DO "nuove" (SQLite) sono quelle del piano gratuito.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
