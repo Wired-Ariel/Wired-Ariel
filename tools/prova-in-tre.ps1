@@ -37,6 +37,11 @@ param(
     # simboli DEVONO essere la stessa versione, o l'iniettore rifiuta.
     [ValidateSet("it", "usa")]
     [string]$Syms = "it",
+    # PARTITA MISTA (2026-09-24): il giocatore 2 puo' usare un'altra ROM e altri
+    # simboli, per provare insieme Smeraldo italiano e inglese. Vuoti = come il 1.
+    [string]$Rom2 = "",
+    [ValidateSet("", "it", "usa")]
+    [string]$Syms2 = "",
     # Perdita simulata sul tratto verso il relay, in percentuale: serve a far
     # scattare le correzioni di posizione, che con un canale perfetto non si
     # vedono mai.
@@ -53,16 +58,19 @@ $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $net  = Join-Path $root "net"
 $mg   = Join-Path $root "mgba"
 $out  = Join-Path $root "build\prova-in-tre"
-$py   = "D:\Progettini\Python313\python.exe"
+$py   = (Get-Command python -ErrorAction SilentlyContinue).Source   # Python 3 dal PATH
 
 # I simboli che l'autopilota legge per sapere dov'e' il giocatore: devono
 # essere gli stessi con cui il payload e' stato compilato, o l'iniettore
 # rifiuta e a schermo non succede niente.
-$symsFile = if ($Syms -eq "usa") { "game_syms.h" } else { "game_syms_it.h" }
+function RomDi([int]$i)  { if ($i -eq 2 -and $Rom2)  { return $Rom2 }  return $Rom }
+function SymsDi([int]$i) { if ($i -eq 2 -and $Syms2) { return $Syms2 } return $Syms }
+function SymsFileDi([int]$i) { if ((SymsDi $i) -eq "usa") { return "game_syms.h" } return "game_syms_it.h" }
 
 if (-not (Test-Path $Rom))  { throw "ROM non trovata: $Rom" }
+if ($Rom2 -and -not (Test-Path $Rom2)) { throw "ROM del giocatore 2 non trovata: $Rom2" }
 if (-not (Test-Path $Mgba)) { throw "mGBA non trovato: $Mgba" }
-if (-not (Test-Path $py))   { throw "python non trovato: $py" }
+if (-not $py) { throw "python non trovato nel PATH" }
 
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
 New-Item -ItemType Directory -Force $out | Out-Null
@@ -83,7 +91,7 @@ if (-not $SkipBuild) {
             -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                             (Join-Path $root "build.ps1"),
                             "-LinkRole", "client", "-LinkPort", $porta,
-                            "-OutName", ("q" + $i), "-Syms", $Syms)
+                            "-OutName", ("q" + $i), "-Syms", (SymsDi $i))
         if ($b.ExitCode -ne 0) { throw "build del Lua del giocatore $i fallita (exit $($b.ExitCode))" }
         if (-not (Test-Path (Join-Path $mg ("inject.q{0}.lua" -f $i)))) {
             throw "build finita ma manca mgba\inject.q$i.lua"
@@ -118,20 +126,21 @@ Write-Output "relay + $Giocatori client avviati (stanza $Room)"
 $asse = @("verticale", "orizzontale", "verticale")
 for ($i = 1; $i -le $Giocatori; $i++) {
     $romCopia = Join-Path $out ("gioco$i.gba")
-    Copy-Item $Rom $romCopia
+    $romI = RomDi $i
+    Copy-Item $romI $romCopia
     # mGBA cerca il salvataggio accanto alla ROM con estensione .SAV: un
     # .srm (il nome di RetroArch/VBA) lo ignora e parte una partita NUOVA -
     # il primo tentativo del 2026-08-25 e' finito sull'intro di Birch. Si
     # accetta l'uno o l'altro come sorgente e si scrive sempre .sav.
     $save = $null
     foreach ($est in @(".sav", ".srm")) {
-        $cand = [IO.Path]::ChangeExtension($Rom, $est)
+        $cand = [IO.Path]::ChangeExtension($romI, $est)
         if (Test-Path $cand) { $save = $cand; break }
     }
     if ($save) {
         Copy-Item $save (Join-Path $out ("gioco$i.sav"))
     } else {
-        Write-Warning ("nessun salvataggio accanto a {0}: le istanze partiranno da una partita nuova" -f $Rom)
+        Write-Warning ("nessun salvataggio accanto a {0}: le istanze partiranno da una partita nuova" -f $romI)
     }
 
     $boot = Join-Path $out ("boot$i.lua")
@@ -141,7 +150,7 @@ AUTO_DIR = [[$($out -replace '\\','/')]]
 AUTO_INJECT = [[$(($mg -replace '\\','/'))/inject.q$i.lua]]
 AUTO_PASSI = "$($asse[$i-1])"
 AUTO_BANCO = $(if ($Banco -and $i -eq 1) { "[[" + ($Banco.Replace("\","/")) + "]]" } else { "nil" })
-AUTO_SYMS = [[$(($root -replace '\\','/'))/payload/$symsFile]]
+AUTO_SYMS = [[$(($root -replace '\\','/'))/payload/$(SymsFileDi $i)]]
 dofile([[$(($mg -replace '\\','/'))/autopilota.lua]])
 "@
     [IO.File]::WriteAllText($boot, $testo, [Text.Encoding]::ASCII)
