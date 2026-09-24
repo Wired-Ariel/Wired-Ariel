@@ -267,6 +267,12 @@ Prova end-to-end in emulatore, senza mani: `.\tools\prova-in-tre.ps1 -Rom <smera
 avvia tre mGBA pilotati da `mgba/autopilota.lua`, li fa camminare e **fotografa** ogni schermo
 accanto ai contatori del payload.
 
+Audio in lotta sulla build da GBA vero: dopo `.\build.ps1 -Syms it -WithSio` e `.\hw\mbstub\build.ps1`,
+`mgba/banco_audio.lua` carica il payload con lo stesso ingresso in `AgbMain` dello stub multiboot
+(`mgba/handoff_test.lua`), fa N lotte vere e controlla a ogni frame che la maschera degli interrupt del
+gioco (`sRegIE`) non venga mai ridotta in `REG_IE` - la causa della musica rotta in lotta corretta il
+2026-08-30. Parametri e criteri in testa al file.
+
 ---
 
 ## Ospitare il proprio relay

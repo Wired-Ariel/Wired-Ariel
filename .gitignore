@@ -6,6 +6,7 @@ __pycache__/
 
 # --- script Lua GENERATI da build.ps1 (il sorgente e' mgba/inject_body.lua) ---
 mgba/inject.*.lua
+mgba/handoff_test.lua
 
 # --- dati della Mappa live: generati da tools/gen_mappa.py dalla decomp ---
 net/mappa/

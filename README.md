@@ -266,6 +266,12 @@ Hands-free end-to-end test in the emulator: `.\tools\prova-in-tre.ps1 -Rom <emer
 launches three mGBA instances driven by `mgba/autopilota.lua`, makes them walk and **screenshots** every
 screen next to the payload's counters.
 
+Battle audio on the real-GBA build: after `.\build.ps1 -Syms it -WithSio` and `.\hw\mbstub\build.ps1`,
+`mgba/banco_audio.lua` loads the payload through the same `AgbMain` entry as the multiboot stub
+(`mgba/handoff_test.lua`), fights N real battles and checks every frame that the game's interrupt
+mask (`sRegIE`) is never cut down in `REG_IE` - the cause of the broken battle music fixed on 2026-08-30.
+Parameters and criteria are in the file header.
+
 ---
 
 ## Hosting your own relay
