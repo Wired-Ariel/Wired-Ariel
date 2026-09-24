@@ -1,263 +1,261 @@
 # gen3-poke-multiplayer
 
-**Vedi i tuoi amici camminare nel tuo Pokémon Smeraldo. Su Game Boy Advance vero, con la cartuccia originale, attraverso internet.**
+> 🇮🇹 Versione italiana: [README.it.md](README.it.md)
 
-Nessuna ROM modificata, nessun salvataggio toccato, nessun trucco da fare in partita:
-colleghi il cavo, accendi, giochi — e gli altri giocatori compaiono nella tua mappa e ci
-camminano con l'animazione vera del gioco.
+**Watch your friends walk around your Pokémon Emerald. On a real Game Boy Advance, with the original cartridge, over the internet.**
 
-🌐 **Prova subito dal browser:** https://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/
-📦 **Binari pronti (firmware, stub multiboot, script per mGBA):** pagina *Releases* di questo repository
+No modified ROM, no save file touched, no in-game tricks:
+plug in the cable, switch on, play — and the other players show up on your map and walk
+around it with the game's real animation.
 
-| Giocatore 1 | Giocatore 2 | Giocatore 3 |
+🌐 **Try it now from your browser:** https://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/
+📦 **Ready-made binaries (firmware, multiboot stub, mGBA script):** this repository's *Releases* page
+
+| Player 1 | Player 2 | Player 3 |
 |---|---|---|
 | ![p1](docs/img/2026-08-25-tre-giocatori-p1.png) | ![p2](docs/img/2026-08-25-tre-giocatori-p2.png) | ![p3](docs/img/2026-08-25-tre-giocatori-p3.png) |
 
-*La stessa scena vista da tre partite diverse: ognuno vede gli altri due.*
+*The same scene seen from three different games: everyone sees the other two.*
 
-| Si cammina insieme | Cable Club via internet | Scambio completato |
+| Walking together | Cable Club over the internet | Trade completed |
 |---|---|---|
-| ![insieme](docs/img/foto-p3-73.png) | ![club](docs/img/2026-08-27-club-due-emulatori-saletta.png) | ![scambio](docs/img/2026-08-27-SCAMBIO-FATTO-p1.png) |
+| ![together](docs/img/foto-p3-73.png) | ![club](docs/img/2026-08-27-club-due-emulatori-saletta.png) | ![trade](docs/img/2026-08-27-SCAMBIO-FATTO-p1.png) |
 
-> *English summary:* gen3-poke-multiplayer brings **free-roaming overworld multiplayer to Pokémon Emerald on
-> real GBA hardware with an unmodified cartridge**. A tiny payload is loaded into RAM via
-> multiboot *before* the cartridge boots, hooks the IRQ vector, and draws remote players as
-> native object events driven by the game's own movement actions. Transport: GBA link cable →
-> Raspberry Pi Pico (patched Celio firmware) → USB/WebUSB → UDP/WebSocket relay. Up to 4
-> players, mixed hardware + mGBA emulator + browser. Currently targets the **Italian** Emerald ROM.
-> The software was written by **Claude (Anthropic)** in guided sessions, with all hardware
-> testing done by Lain.
+> ⚠️ **Currently works with the Italian release of Pokémon Emerald only.** The in-game screenshots are
+> in Italian for that reason. Most of the source code comments are in Italian too.
 
 ---
 
-## Indice
+## Contents
 
-1. [Cosa fa (e cosa no)](#cosa-fa-e-cosa-no)
-2. [Cosa ti serve](#cosa-ti-serve)
-3. [Come si gioca — tre modi](#come-si-gioca--tre-modi)
-4. [Come funziona davvero](#come-funziona-davvero)
-5. [Architettura del repository](#architettura-del-repository)
-6. [Compilare da sorgente](#compilare-da-sorgente)
-7. [Test](#test)
-8. [Ospitare il proprio relay](#ospitare-il-proprio-relay)
-9. [Limiti noti](#limiti-noti)
-10. [Crediti e fonti](#crediti-e-fonti)
-11. [Note legali](#note-legali)
-
----
-
-## Cosa fa (e cosa no)
-
-**Fa:**
-- mostra **fino a 3 amici** (4 giocatori in tutto) che camminano, corrono, vanno in bici e fanno
-  surf nella tua mappa, con animazione, passi e interpolazione **del motore originale**;
-- segue i cambi mappa: quando un amico attraversa il confine di una route lo vedi arrivare,
-  quando entra in una casa sparisce e ricompare quando esce;
-- si mette a dormire da solo in lotta, nei menu e nelle schermate speciali, e si risveglia al
-  ritorno nell'overworld;
-- **scambi e lotte via internet** attraverso il Cable Club del gioco (provato sul fisico, dal
-  sito e dal pannello per PC);
-- fa giocare insieme, **nella stessa stanza**, GBA veri, emulatori mGBA e spettatori dal browser;
-- ha una **Mappa live** di Hoenn dove vedi dove sono tutti.
-
-**Non fa:**
-- non modifica la cartuccia (è ROM a maschera: fisicamente impossibile) e **non scrive il
-  salvataggio**;
-- non distribuisce il gioco né parti di esso: **serve la tua cartuccia** (o il tuo dump, per l'emulatore);
-- non richiede nessuna azione dentro il gioco: niente glitch, niente box del PC, niente
-  sequenze di tasti.
+1. [What it does (and doesn't)](#what-it-does-and-doesnt)
+2. [What you need](#what-you-need)
+3. [How to play — three ways](#how-to-play--three-ways)
+4. [How it really works](#how-it-really-works)
+5. [Repository layout](#repository-layout)
+6. [Building from source](#building-from-source)
+7. [Tests](#tests)
+8. [Hosting your own relay](#hosting-your-own-relay)
+9. [Known limitations](#known-limitations)
+10. [Credits and sources](#credits-and-sources)
+11. [Legal](#legal)
 
 ---
 
-## Cosa ti serve
+## What it does (and doesn't)
 
-### Per giocare su GBA vero
-- un **Game Boy Advance** (o GBA SP) e una cartuccia originale di **Pokémon Smeraldo italiano**;
-- un **Raspberry Pi Pico (RP2040)** con una scheda link (es.
-  [game-boy-pico-link-board](https://github.com/agtbaskara/game-boy-pico-link-board)) e un
-  **cavo link GBA** a 5 contatti;
-- il firmware **Celio esteso da questo progetto** (`celio.uf2` nelle Releases — si flasha una volta
-  sola: tieni premuto BOOTSEL, collega il Pico, trascina il file sul disco `RPI-RP2`);
-- **Chrome o Edge** (serve WebUSB). Su **Windows**, una volta sola, il driver **WinUSB** per il
-  Pico con [Zadig](https://zadig.akeo.ie/).
+**It does:**
+- show **up to 3 friends** (4 players in total) walking, running, cycling and surfing on your
+  map, with animation, footsteps and interpolation **from the original engine**;
+- follow map changes: when a friend crosses a route border you see them arrive,
+  when they enter a house they disappear and reappear when they come out;
+- go to sleep by itself in battles, menus and special screens, and wake up when you
+  return to the overworld;
+- **trades and battles over the internet** through the game's Cable Club (tested on real
+  hardware, from the website and from the PC panel);
+- let real GBAs, mGBA emulators and browser spectators play together **in the same room**;
+- provide a **Live map** of Hoenn showing where everyone is.
 
-### Per giocare in emulatore
-- **mGBA 0.10 o successivo** (con scripting Lua) e il **tuo** dump di Pokémon Smeraldo italiano;
-- lo script per mGBA (lo scarichi dal sito già configurato con la tua stanza, o `gen3-poke-multiplayer-emulatore.lua` dalle Releases).
-
-### Per guardare e basta
-- un browser qualsiasi, anche Firefox: modalità **spettatore** + Mappa live.
+**It doesn't:**
+- modify the cartridge (it's mask ROM: physically impossible), and it **never writes the
+  save file**;
+- distribute the game or any part of it: **you need your own cartridge** (or your own dump, for the emulator);
+- require any in-game action: no glitches, no PC boxes, no button
+  sequences.
 
 ---
 
-## Come si gioca — tre modi
+## What you need
 
-Tutti e tre finiscono **nella stessa stanza**: scegliete un numero fra 1 e 65535 e usatelo tutti.
+### To play on a real GBA
+- a **Game Boy Advance** (or GBA SP) and an original **Italian Pokémon Emerald** cartridge;
+- a **Raspberry Pi Pico (RP2040)** with a link board (e.g.
+  [game-boy-pico-link-board](https://github.com/agtbaskara/game-boy-pico-link-board)) and a
+  5-pin **GBA link cable**;
+- the **Celio firmware extended by this project** (`celio.uf2` in the Releases — flashed only
+  once: hold BOOTSEL, plug in the Pico, drag the file onto the `RPI-RP2` drive);
+- **Chrome or Edge** (WebUSB is required). On **Windows**, once: the **WinUSB** driver for the
+  Pico via [Zadig](https://zadig.akeo.ie/).
 
-### A. GBA vero, dal browser (il modo consigliato)
-1. Apri il sito, premi **«Collega il Pico»** e scegli il dispositivo.
-2. Accendi il GBA **senza cartuccia**, col cavo collegato. Premi **«Carica il gioco nel GBA»**:
-   lo schermo diventa **rosso** (~15 s, il programma viaggia nel cavo).
-3. Quando il sito lo dice, **inserisci la cartuccia a console accesa**: schermo **giallo**, poi
-   **verde**, e Smeraldo parte normalmente — con il nostro programma già dentro.
-4. Carica la partita, scrivi la **stanza** e premi **«Gioca»**. Fatto.
+### To play on an emulator
+- **mGBA 0.10 or later** (with Lua scripting) and **your own** dump of Italian Pokémon Emerald;
+- the mGBA script (download it from the website, already set up with your room, or grab
+  `gen3-poke-multiplayer-emulatore.lua` from the Releases).
 
-### B. GBA vero, dal pannello per PC
+### To just watch
+- any browser, Firefox included: **spectator** mode + Live map.
+
+---
+
+## How to play — three ways
+
+All three end up **in the same room**: pick a number between 1 and 65535 and everybody uses it.
+
+### A. Real GBA, from the browser (recommended)
+1. Open the website, press **«Connect the Pico»** and pick the device.
+2. Switch on the GBA **with no cartridge**, cable plugged in. Press **«Load the game into the GBA»**:
+   the screen turns **red** (~15 s, the program travels through the cable).
+3. When the site tells you, **insert the cartridge with the console on**: **yellow** screen, then
+   **green**, and Emerald boots normally — with our program already inside.
+4. Load your save, type the **room** and press **«Play»**. Done.
+
+### B. Real GBA, from the PC panel
 ```bash
 pip install pyusb libusb-package
 ```
 ```bash
 net\PANNELLO.bat
 ```
-Si apre `http://127.0.0.1:7411`: stessi passi del sito (relay, multiboot, partita, sblocco),
-più i log completi. Ripiego a riga di comando: `net\1-multiboot.bat` poi `net\2-gioca-internet.bat`.
+It opens `http://127.0.0.1:7411` (Italian UI): same steps as the website (relay, multiboot, game,
+unlock), plus the full logs. Command-line fallback: `net\1-multiboot.bat` then `net\2-gioca-internet.bat`.
 
-### C. Emulatore mGBA
-1. Sul sito scrivi la stanza e premi **«Scarica lo script per l'emulatore»**.
-2. In mGBA carica Smeraldo italiano, arriva nell'overworld, poi *Tools → Scripting → File →
-   Load script* → lo script scaricato (`gen3-poke-multiplayer-stanzaN.lua`).
-3. Stanza e peer si cambiano anche dentro il gioco: **L+R+B** apre un pannellino (aprilo da fermo).
-
----
-
-## Come funziona davvero
-
-### Il vincolo che governa tutto
-Il cavo link non può aggiungere funzioni a un gioco: può solo parlare il protocollo che la ROM già
-conosce. E in Gen 3 **non esiste nessuna routine** che disegni un giocatore remoto in una route.
-Quindi, per avere l'overworld condiviso, bisogna **eseguire codice nostro dentro il gioco**.
-Il codice di Smeraldo gira dalla ROM (non scrivibile), ma il gioco si guida attraverso
-**puntatori in RAM** — e quelli sì che si possono riscrivere.
-
-### Il vettore d'ingresso: il multiboot *residente*
-Il BIOS del GBA entra in modalità multiboot solo **a slot vuoto**. Il trucco è sfruttare l'ordine
-delle cose:
-
-1. slot vuoto → il PC/browser carica via cavo uno **stub** (`hw/mbstub`) in modalità MultiPlay 16 bit
-   (lo stesso modo del Cable Club, quindi **stesso cavo e stesso firmware** del gioco);
-2. lo stub copia il **payload** in cima alla EWRAM (`0x0203CF80`, un angolo che Smeraldo non usa)
-   e aspetta la cartuccia;
-3. inserita la cartuccia, lo stub salta dentro `AgbMain` **dopo** l'azzeramento della memoria
-   (`0x080003CE`, dopo `InitIntrHandlers`): in Smeraldo retail `crt0` non azzera niente, quindi
-   il payload sopravvive;
-4. il payload aggancia il **vettore IRQ a `0x03007FFC`** e concatena l'handler originale: da lì
-   gira a ogni fotogramma, per sempre, qualunque scena il gioco carichi.
-
-Allo spegnimento non resta nulla: è tutto in RAM.
-
-### Le decisioni che contano
-1. **Movement action, non coordinate.** Al personaggio remoto non si scrive x/y (teletrasporterebbe
-   di tile in tile): gli si mette in coda `MOVEMENT_ACTION_WALK_NORMAL_DOWN` & co. Il motore regala
-   animazione, sub-pixel e timing. È indistinguibile da un NPC vero.
-2. **Eventi, non stati.** Non si manda la posizione a ogni frame: si manda «ho iniziato un passo,
-   direzione D, dal tile T» (**12 byte**), più una posizione assoluta ogni tanto come correzione.
-   100 ms di ping = l'amico mezzo passo indietro, invisibile.
-3. **Agganciare l'IRQ, non il callback di scena.** `gMain.vblankCallback` viene riscritto a ogni cambio
-   di scena; il vettore IRQ no.
-4. **Il cambio mappa è un evento del protocollo.** Attraversare il bordo di una route non è un warp e
-   il gioco aggiorna mappa e coordinate in due momenti diversi: al cambio mappa si riallinea e si
-   manda una posizione assoluta, mai un «passo» (un passo è un tile, per definizione).
-5. **Dall'IRQ non si tocca il gioco.** L'IRQ fa solo I/O seriale; tutto ciò che crea o muove oggetti
-   gira dal main loop (`gMain.callback1`), dove il gioco se lo aspetta.
-6. **Ridondanza contro la perdita.** Il tratto USB→SIO perde qualche frame e nessuno lo ricuce: ogni
-   PASSO/GIRA esce due volte verso il gioco e il payload scarta la copia sul numero di sequenza.
-
-### Niente da reimplementare: le decomp
-[pokeemerald](https://github.com/pret/pokeemerald) è una decompilazione **combaciante**: dal `.map`
-della build si conosce l'indirizzo di ogni funzione. Il payload chiama direttamente le routine
-originali per creare, muovere e animare gli object event, e riusa gli sprite già in ROM.
-Gli indirizzi della ROM **italiana** sono stati ritrovati per firma (`tools/port_syms.py`, 42/42).
-
-### La catena
-```
-GBA ─cavo link─ Pico (Celio F-1…F-4) ─USB─ browser (WebUSB) o client.py
-    ─WebSocket 443 / UDP─ relay ─ … ─ e al contrario fino al GBA dell'amico
-```
-- **Il relay non capisce niente**: fa stanze e consegna datagrammi. La «stanza» è la partita, non la mappa.
-- **Solo `net/client.py` e `web/js/bridge.js` conoscono il formato dei 12 byte** (slot del mittente
-  nel nibble alto del tipo): dedup, riordino, ricucitura, copie ×2.
-- **Il payload parla via mailbox** in RAM: in emulatore la mailbox la legge il Lua di mGBA, sul
-  fisico il driver SIO (`payload/sio.c`) in modalità Multi-Player 16 bit.
-
-### Il firmware del Pico
-Celio esteso con un modo **passthrough** (`0x04`) e quattro modifiche (patch in `hw/firmware/`):
-**F-1** timing di scambio configurabile a runtime, **F-2** niente filtro sulle parole `0x0000`
-(più back-pressure su `sendData`), **F-3** `SetCableType`, **F-4** riavvio software
-(`0x43 0xA5`) usato a fine multiboot. Periodo di scambio misurato: ~4 ms → **226 parole/s**.
-
-### Lo spazio: ~11 KB, contati a byte
-Il payload vive in ~11,5 KB di EWRAM, stack IRQ compreso. Per farci stare 4 giocatori e il driver
-seriale: `-Os` su `main.c`, flag GCC scelti con una **ricerca greedy bidirezionale** rifatta dopo
-ogni modifica seria, helper `noinline` per pagare una volta sola i literal pool di Thumb-1, e
-guardie in `build.ps1` che **falliscono la build** se il margine, lo stack IRQ statico o il contratto
-C↔Lua (`PayloadState` ↔ tabella `S`) non tornano.
+### C. mGBA emulator
+1. On the website, type the room and press **«Download the emulator script»**.
+2. In mGBA load Italian Emerald, get into the overworld, then *Tools → Scripting → File →
+   Load script* → the downloaded script (`gen3-poke-multiplayer-roomN.lua`).
+3. Room and peer can also be changed in game: **L+R+B** opens a small panel (open it while standing still).
 
 ---
 
-## Architettura del repository
+## How it really works
 
-| Cartella | Cosa |
+### The constraint that rules everything
+The link cable can't add features to a game: it can only speak the protocol the ROM already
+knows. And in Gen 3 **there is no routine** that draws a remote player on a route.
+So, to get a shared overworld, **our own code has to run inside the game**.
+Emerald's code runs from ROM (not writable), but the game is steered through
+**pointers in RAM** — and those can be rewritten.
+
+### The entry vector: *resident* multiboot
+The GBA BIOS only enters multiboot mode **with an empty slot**. The trick is to exploit the order
+of events:
+
+1. empty slot → the PC/browser loads a **stub** (`hw/mbstub`) over the cable in 16-bit MultiPlay mode
+   (the same mode as the Cable Club, so **same cable and same firmware** as in game);
+2. the stub copies the **payload** to the top of EWRAM (`0x0203CF80`, a corner Emerald never uses)
+   and waits for the cartridge;
+3. once the cartridge is inserted, the stub jumps into `AgbMain` **after** memory is cleared
+   (`0x080003CE`, after `InitIntrHandlers`): in retail Emerald `crt0` clears nothing, so
+   the payload survives;
+4. the payload hooks the **IRQ vector at `0x03007FFC`** and chains the original handler: from then on
+   it runs every frame, forever, whatever scene the game loads.
+
+Nothing is left at power-off: it all lives in RAM.
+
+### The decisions that matter
+1. **Movement actions, not coordinates.** We never write x/y to the remote character (it would teleport
+   tile by tile): we queue `MOVEMENT_ACTION_WALK_NORMAL_DOWN` & co. The engine gives us
+   animation, sub-pixel movement and timing for free. It's indistinguishable from a real NPC.
+2. **Events, not state.** We don't send the position every frame: we send «I started a step,
+   direction D, from tile T» (**12 bytes**), plus an absolute position now and then as a correction.
+   100 ms of ping = your friend half a step behind, invisible.
+3. **Hook the IRQ, not the scene callback.** `gMain.vblankCallback` is rewritten at every scene
+   change; the IRQ vector isn't.
+4. **A map change is a protocol event.** Crossing a route border isn't a warp, and
+   the game updates map and coordinates at two different moments: on a map change we realign and
+   send an absolute position, never a «step» (a step is one tile, by definition).
+5. **The IRQ never touches the game.** The IRQ only does serial I/O; everything that creates or moves objects
+   runs from the main loop (`gMain.callback1`), where the game expects it.
+6. **Redundancy against loss.** The USB→SIO hop drops a few frames and nothing stitches them back: every
+   STEP/TURN goes out twice towards the game and the payload discards the copy by sequence number.
+
+### Nothing to reimplement: the decomps
+[pokeemerald](https://github.com/pret/pokeemerald) is a **matching** decompilation: the build's `.map`
+gives the address of every function. The payload calls the original routines directly to create,
+move and animate object events, and reuses sprites already in ROM.
+The addresses for the **Italian** ROM were found by signature (`tools/port_syms.py`, 42/42).
+
+### The chain
+```
+GBA ─link cable─ Pico (Celio F-1…F-4) ─USB─ browser (WebUSB) or client.py
+    ─WebSocket 443 / UDP─ relay ─ … ─ and back, all the way to your friend's GBA
+```
+- **The relay understands nothing**: it manages rooms and delivers datagrams. A «room» is the game, not the map.
+- **Only `net/client.py` and `web/js/bridge.js` know the 12-byte format** (sender slot
+  in the high nibble of the type): dedup, reordering, gap stitching, ×2 copies.
+- **The payload talks through a mailbox** in RAM: in the emulator the mailbox is read by mGBA's Lua, on
+  hardware by the SIO driver (`payload/sio.c`) in 16-bit Multi-Player mode.
+
+### The Pico firmware
+Celio extended with a **passthrough** mode (`0x04`) and four changes (patch in `hw/firmware/`):
+**F-1** exchange timing configurable at runtime, **F-2** no filtering of `0x0000` words
+(plus back-pressure on `sendData`), **F-3** `SetCableType`, **F-4** software reboot
+(`0x43 0xA5`) used at the end of multiboot. Measured exchange period: ~4 ms → **226 words/s**.
+
+### Space: ~11 KB, counted to the byte
+The payload lives in ~11.5 KB of EWRAM, IRQ stack included. To fit 4 players and the serial
+driver: `-Os` on `main.c`, GCC flags chosen by a **bidirectional greedy search** re-run after
+every significant change, `noinline` helpers to pay for Thumb-1 literal pools only once, and
+guards in `build.ps1` that **fail the build** if the margin, the static IRQ stack or the
+C↔Lua contract (`PayloadState` ↔ table `S`) don't add up.
+
+---
+
+## Repository layout
+
+| Folder | What |
 |---|---|
-| `payload/` | il codice che gira **dentro** Smeraldo: hook IRQ (`hook.S`), logica (`main.c`), driver SIO (`sio.c`), simboli della ROM (`game_syms*.h`, generati) |
-| `hw/mbstub/` | lo stub multiboot che carica il payload e salta nella cartuccia |
-| `hw/firmware/` | patch del firmware Celio (F-1…F-4) e istruzioni per ricompilarlo |
-| `hw/gbalink-fw/` | firmware link alternativo per RP2040 (GPL-3.0) |
-| `hw/siotest/` | banco di prova SIO su hardware (usa lo stesso `sio.c` del payload) |
-| `mgba/` | lato emulatore: `inject_body.lua` (iniettore + rete), `club_lua.lua`, libreria WebSocket, autopilota per le prove automatiche |
-| `net/` | lato PC: `client.py`, `relay.py`, `relay_ws.py`, `mb_multi.py` (multiboot), `usb_link.py`, `club_link.py` (Cable Club via internet), `pannello.py` + `pannello.html`, `mappa.html`, test |
-| `web/` | il sito: pannello nel browser (WebUSB + multiboot + relay WebSocket + Cable Club), spiegazione, pagine di test |
-| `tools/` | generatori (simboli, mappa, nomi italiani dalla ROM), preparazione pacchetti e sito, simulatore, test |
-| `build.ps1` | la build del payload e degli script Lua, con tutte le guardie |
+| `payload/` | the code that runs **inside** Emerald: IRQ hook (`hook.S`), logic (`main.c`), SIO driver (`sio.c`), ROM symbols (`game_syms*.h`, generated) |
+| `hw/mbstub/` | the multiboot stub that loads the payload and jumps into the cartridge |
+| `hw/firmware/` | Celio firmware patch (F-1…F-4) and instructions to rebuild it |
+| `hw/gbalink-fw/` | alternative link firmware for RP2040 (GPL-3.0) |
+| `hw/siotest/` | SIO test bench on hardware (uses the same `sio.c` as the payload) |
+| `mgba/` | emulator side: `inject_body.lua` (injector + networking), `club_lua.lua`, WebSocket library, autopilot for automated tests |
+| `net/` | PC side: `client.py`, `relay.py`, `relay_ws.py`, `mb_multi.py` (multiboot), `usb_link.py`, `club_link.py` (Cable Club over the internet), `pannello.py` + `pannello.html`, `mappa.html`, tests |
+| `web/` | the website: in-browser panel (WebUSB + multiboot + WebSocket relay + Cable Club), explanations in IT/EN, test pages |
+| `tools/` | generators (symbols, map, Italian names from the ROM), package and site builders, simulator, tests |
+| `build.ps1` | the build of the payload and the Lua scripts, with all the guards |
 
 ---
 
-## Compilare da sorgente
+## Building from source
 
-Strumenti: **Windows + PowerShell 5.1**, [Arm GNU Toolchain](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads)
-(`arm-none-eabi-gcc` sul PATH), **Python 3.11+**. Per rigenerare i simboli o la Mappa live serve
-anche una build di [pokeemerald](https://github.com/pret/pokeemerald) (devkitARM, in WSL:
+Tools: **Windows + PowerShell 5.1**, [Arm GNU Toolchain](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads)
+(`arm-none-eabi-gcc` on PATH), **Python 3.11+**. To regenerate the symbols or the Live map you also
+need a build of [pokeemerald](https://github.com/pret/pokeemerald) (devkitARM, in WSL:
 `tools/build-pokeemerald.sh`).
 
 ```powershell
-.\build.ps1 -Syms it -WithSio          # payload per GBA vero (ROM italiana + driver SIO)
-.\hw\mbstub\build.ps1                  # stub multiboot: ingloba il payload APPENA costruito
-.\build.ps1 -LinkRole relay -Syms it -OutName emulatore   # script per mGBA
-python tools\gen_mappa.py              # dati della Mappa live (dalla decomp + nomi IT dalla ROM)
-.\tools\prepara-sito-web.ps1 -Relay wss://tuo.host/ws -Stanza 0     # assembla il sito
+.\build.ps1 -Syms it -WithSio          # payload for real GBA (Italian ROM + SIO driver)
+.\hw\mbstub\build.ps1                  # multiboot stub: embeds the payload JUST built
+.\build.ps1 -LinkRole relay -Syms it -OutName emulatore   # mGBA script
+python tools\gen_mappa.py              # Live map data (from the decomp + Italian names from the ROM)
+.\tools\prepara-sito-web.ps1 -Relay wss://your.host/ws -Stanza 0     # assembles the website
 ```
 
-L'ordine conta: lo stub ingloba l'ultimo `payload.bin`. Ogni build stampa il **margine EWRAM**,
-lo **stack** statico dell'IRQ e il **contratto** C↔Lua: se uno dei tre non torna, la build si ferma.
+Order matters: the stub embeds the latest `payload.bin`. Every build prints the **EWRAM margin**,
+the static IRQ **stack** and the C↔Lua **contract**: if any of the three doesn't add up, the build stops.
+The multiboot stub build needs a GBA ROM of your own to copy the header logo from (`-LogoFrom`).
 
-I file generati (`mgba/inject.*.lua`, `payload/game_syms*.h`, `mbstub.gba`) **non si modificano a mano**.
+Generated files (`mgba/inject.*.lua`, `payload/game_syms*.h`, `mbstub.gba`) **must not be edited by hand**.
 
 ---
 
-## Test
+## Tests
 
-Unittest in sola libreria standard, si lanciano singolarmente:
+Standard-library-only unit tests, run one at a time:
 
 ```bash
 python net/test_tre_giocatori.py
 ```
 
-Gli altri: `net/test_deframer.py`, `test_bridge_tcp.py`, `test_relay_rebind.py`, `test_club.py`,
+The others: `net/test_deframer.py`, `test_bridge_tcp.py`, `test_relay_rebind.py`, `test_club.py`,
 `test_pannello.py`, `test_relay_ws.py`, `test_slot.py`, `test_relay_cap.py`, `test_client_ws.py`,
-`test_spettatore.py`, `test_presenza.py`, e in `tools/` `test_ruolo_relay.py`, `test_club_lua.py`
-(richiedono `pip install lupa`). Il sito ha i suoi autotest nel browser: `web/test.html`,
+`test_spettatore.py`, `test_presenza.py`, and in `tools/` `test_ruolo_relay.py`, `test_club_lua.py`
+(these need `pip install lupa`). The website has its own in-browser self-tests: `web/test.html`,
 `web/mb_test.html`, `web/bridge_test.html`.
 
-Prova end-to-end in emulatore, senza mani: `.\tools\prova-in-tre.ps1 -Rom <smeraldo-ita.gba> -Giocatori 3`
-avvia tre mGBA pilotati da `mgba/autopilota.lua`, li fa camminare e **fotografa** ogni schermo
-accanto ai contatori del payload.
+Hands-free end-to-end test in the emulator: `.\tools\prova-in-tre.ps1 -Rom <emerald-ita.gba> -Giocatori 3`
+launches three mGBA instances driven by `mgba/autopilota.lua`, makes them walk and **screenshots** every
+screen next to the payload's counters.
 
 ---
 
-## Ospitare il proprio relay
+## Hosting your own relay
 
-Il relay è Python puro (`net/relay.py`, UDP) più un frontale WebSocket (`net/relay_ws.py`) per i
-browser. Guida completa per una VPS con nginx/Caddy e HTTPS: [`net/RELAY-VPS.md`](net/RELAY-VPS.md);
-blocco nginx pronto: [`net/nginx-passotile.conf`](net/nginx-passotile.conf).
+The relay is pure Python (`net/relay.py`, UDP) plus a WebSocket front end (`net/relay_ws.py`) for
+browsers. Full guide for a VPS with nginx/Caddy and HTTPS (in Italian): [`net/RELAY-VPS.md`](net/RELAY-VPS.md);
+ready-made nginx block: [`net/nginx-passotile.conf`](net/nginx-passotile.conf).
 
 ```bash
 python net/relay.py --port 9000
@@ -266,64 +264,65 @@ python net/relay.py --port 9000
 python net/relay_ws.py --port 9001 --relay 127.0.0.1:9000
 ```
 
-Massimo 4 giocatori per stanza (il quinto viene rifiutato); gli spettatori non contano.
+At most 4 players per room (the fifth is refused); spectators don't count.
 
 ---
 
-## Limiti noti
+## Known limitations
 
-- **Solo Pokémon Smeraldo italiano**, per ora. Gli indirizzi USA esistono (`-Syms usa`) ed è la
-  ROM della decomp, ma sul fisico è stata provata solo la cartuccia italiana.
-  Rosso Fuoco/Verde Foglia sono il prossimo passo naturale (anche `pokefirered` è decompilato).
-- **16 object event per mappa**: su una mappa affollata ci stanno 2-3 amici. Il quarto amico in su
-  non ha avatar ma resta sulla Mappa live.
-- **Mappe non adiacenti**: l'amico si vede sulla tua mappa e nella striscia della mappa connessa
-  che il gioco tiene caricata (~7 tile). Oltre, non esiste terreno da disegnare.
-- **L'amico blocca la vista degli allenatori**: nel gioco la vista *è* una collisione. Scelta
-  consapevole; col d-pad ci passi attraverso, così non ti blocca nelle porte.
-- **Firefox e Safari** non hanno WebUSB: da lì si può solo guardare (spettatore).
-- **L'emulatore non entra nel Cable Club** (mGBA non fa da partner del link da script). Scambi e
-  lotte funzionano fra GBA veri.
-- Latenza: sotto ~50 ms di ping è perfetto; oltre si vede un po' di rincorsa.
+- **Italian Pokémon Emerald only**, for now. US addresses exist (`-Syms usa`, it's the decomp's
+  ROM), but only the Italian cartridge has been tested on hardware.
+  FireRed/LeafGreen are the natural next step (`pokefirered` is decompiled too).
+- **16 object events per map**: a crowded map fits 2-3 friends. From the fourth friend on
+  there's no avatar, but they stay on the Live map.
+- **Non-adjacent maps**: your friend is visible on your map and on the strip of the connected map
+  the game keeps loaded (~7 tiles). Beyond that, there's no terrain to draw.
+- **Your friend blocks trainers' line of sight**: in the game, line of sight *is* a collision. A deliberate
+  choice; you can walk through them with the d-pad, so they never block you in doorways.
+- **Firefox and Safari** have no WebUSB: from there you can only watch (spectator).
+- **The emulator can't enter the Cable Club** (mGBA can't act as a link partner from a script). Trades and
+  battles work between real GBAs.
+- Latency: below ~50 ms of ping it's perfect; above that you see a bit of catching up.
 
 ---
 
-## Crediti e fonti
+## Credits and sources
 
-### Chi ha scritto il codice
-**La fonte principale di questo progetto è [Claude](https://www.anthropic.com/claude), di Anthropic.**
-Payload in C/Thumb e assembly, stub multiboot, estensioni del firmware del Pico, driver SIO, protocollo
-di rete, client, relay, frontale WebSocket, porting del multiboot e del Cable Club in JavaScript,
-pannelli, Mappa live, strumenti di analisi della ROM e test: tutto il software di questo repository è
-stato scritto da **Claude (Claude Code)**, in decine di sessioni di lavoro guidate da Lain.
+### Who wrote the code
+**The main source of this project is [Claude](https://www.anthropic.com/claude), by Anthropic.**
+Payload in C/Thumb and assembly, multiboot stub, Pico firmware extensions, SIO driver, network
+protocol, client, relay, WebSocket front end, JavaScript ports of the multiboot and the Cable Club,
+panels, Live map, ROM analysis tools and tests: all the software in this repository was
+written by **Claude (Claude Code)**, over dozens of work sessions guided by Lain.
 
-**Lain** ha avuto l'idea, messo l'hardware, fissato i vincoli («nessun rituale nel gioco, mai»,
-«cartuccia italiana», «non si tocca la ROM») e fatto **tutte le prove sul campo** — con
-**[Hacke](https://github.com/SickPick97)** dall'altra parte del relay, il primo amico ad averlo provato via internet. Il metodo di lavoro è stato: codice → Lain prova sul fisico → misura →
-correzione, con ogni modifica accompagnata da una procedura di test e un contatore che deve salire.
+**Lain** had the idea, provided the hardware, set the constraints («no in-game rituals, ever»,
+«Italian cartridge», «the ROM is never touched») and did **all the field testing** — with
+**[Hacke](https://github.com/SickPick97)** on the other side of the relay, the first friend to try it over the internet.
+The working method was: code → Lain tests on hardware → measure → fix, with every change
+shipped together with a test procedure and a counter that has to go up.
 
-### Su cosa si appoggia
-- **[pret](https://github.com/pret)** — le decompilazioni combacianti `pokeemerald` e `pokefirered`:
-  la mappa degli indirizzi senza cui niente di questo sarebbe stato possibile. Anche i dati della Mappa live vengono da lì.
-- **Progetto Celio** — il firmware RP2040 dell'adattatore USB-GBA, base di tutto lo strato hardware.
-- **smashstacking** — il progetto dell'adattatore GBA-USB su cui Celio è tarato.
+### What it builds on
+- **[pret](https://github.com/pret)** — the matching decompilations `pokeemerald` and `pokefirered`:
+  the address map without which none of this would have been possible. The Live map data comes from there too.
+- **Celio project** — the RP2040 firmware for the USB-GBA adapter, the base of the whole hardware layer.
+- **smashstacking** — the GBA-USB adapter project Celio is tuned for.
 - **agtbaskara** — [game-boy-pico-link-board](https://github.com/agtbaskara/game-boy-pico-link-board).
 - **weimanc** — game-boy-zero-link-board.
-- **endrift e il progetto [mGBA](https://mgba.io/)** — emulatore, debugger e scripting Lua usati per tutto lo sviluppo.
-- **Martin Korth** — [GBATEK](https://problemkaputt.de/gbatek.htm), la documentazione del GBA (SIO, multiboot, timing).
+- **endrift and the [mGBA](https://mgba.io/) project** — emulator, debugger and Lua scripting used throughout development.
+- **Martin Korth** — [GBATEK](https://problemkaputt.de/gbatek.htm), the GBA documentation (SIO, multiboot, timing).
 - **Raspberry Pi**, **Zephyr RTOS**, **devkitPro**, **Arm GNU Toolchain**.
-- **La comunità Celio-Link su GBAtemp**, che ha sciolto per prima lo strato hardware più ostico.
-- **Pokémon Showdown** e **Pokémon Database** — gli sprite animati di Nero/Bianco 2 della Mappa live (scaricati a parte da `tools/sprite_bw.py`, non inclusi qui).
+- **The Celio-Link community on GBAtemp**, the first to crack the toughest hardware layer.
+- **Pokémon Showdown** and **Pokémon Database** — the animated Black/White 2 sprites on the Live map (downloaded separately by `tools/sprite_bw.py`, not included here).
 
 ---
 
-## Note legali
+## Legal
 
-Pokémon, Game Boy Advance e i nomi correlati sono marchi di Nintendo, Creatures Inc. e GAME FREAK inc.
-Questo è un progetto amatoriale senza fini di lucro, **non affiliato né approvato** da loro.
-Il repository **non contiene** ROM né salvataggi: serve la propria cartuccia originale. Contiene solo quattro piccole
-icone derivate dalla grafica del gioco, elencate con tutto il resto in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Pokémon, Game Boy Advance and related names are trademarks of Nintendo, Creatures Inc. and GAME FREAK inc.
+This is a non-profit fan project, **not affiliated with or endorsed** by them.
+This repository **contains no** ROMs or save files: you need your own original cartridge. It only contains four small
+icons derived from the game's graphics, listed with everything else in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
-Codice rilasciato sotto **GPL-3.0** (vedi [`LICENSE`](LICENSE)), come i progetti Celio da cui deriva in parte.
-Il firmware `celio.uf2` delle Releases è Celio-Firmware (GPL-3.0) al commit `f67733c` più la patch in
-`hw/firmware/`: quello è il suo sorgente completo. Componenti di terze parti e licenze: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Code released under **GPL-3.0** (see [`LICENSE`](LICENSE)), like the Celio projects it partly derives from.
+The `celio.uf2` firmware in the Releases is Celio-Firmware (GPL-3.0) at commit `f67733c` plus the patch in
+`hw/firmware/`: that is its complete source. Third-party components and licenses: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
