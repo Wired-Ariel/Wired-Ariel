@@ -30,7 +30,7 @@ Cosa dimostra: TUTTA la catena locale (GBA -> cavo -> Pico -> USB -> client
 d'ingresso su un secondo GBA fisico e la latenza di internet - ma la latenza
 la assorbono le code, e quel verso e' lo stesso codice di questo.
 
-    python finto_club.py --relay 127.0.0.1:9000 --room 58243 --peer-id 2
+    python finto_club.py --relay 127.0.0.1:9000 --room 4242 --peer-id 2
 
 Oppure doppio clic su prova-club-da-solo.bat (relay e 2-gioca gia' su).
 """
@@ -329,7 +329,7 @@ class FintoGba:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--relay", default="127.0.0.1:9000")
-    ap.add_argument("--room", type=int, default=58243)
+    ap.add_argument("--room", type=int, default=4242)
     ap.add_argument("--peer-id", type=int, default=2)
     ap.add_argument("--esci-dopo", type=float, default=0.0, metavar="SECONDI",
                     help="esce dalla saletta (CLUB_LEAVE) dopo N secondi dal "

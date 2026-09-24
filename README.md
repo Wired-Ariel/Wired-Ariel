@@ -23,6 +23,10 @@ around it with the game's real animation.
 
 > ⚠️ **Currently works with the Italian release of Pokémon Emerald only.** The in-game screenshots are
 > in Italian for that reason. Most of the source code comments are in Italian too.
+>
+> ⚠️ **Use at your own risk.** The program never writes your save file, but it runs code inside the game on
+> your original cartridge, and it comes with **no warranty** (GPL-3.0). If you can, **back up your save first**
+> (with a cartridge dumper or flash cart; in mGBA just copy the `.sav` file).
 
 ---
 

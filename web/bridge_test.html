@@ -161,9 +161,9 @@
   ].join("\n") + "\n";
 
   t("script per l'emulatore: le tre righe vengono riscritte, il resto no", function () {
-    var out = configuraLuaProva(TEMPLATE_FINTO, "ws://host/ws", 58243, 0);
+    var out = configuraLuaProva(TEMPLATE_FINTO, "ws://host/ws", 4242, 0);
     return (/^RELAY_URL = "ws:\/\/host\/ws"$/m.test(out) &&
-            /^RELAY_ROOM = 58243$/m.test(out) &&
+            /^RELAY_ROOM = 4242$/m.test(out) &&
             /^RELAY_PEER = 0$/m.test(out) &&
             out.indexOf('PAYLOAD_BASE = 0x0203CF80') === 0 &&
             out.indexOf('ROM_titolo = "POKEMON EMER"') > 0 &&

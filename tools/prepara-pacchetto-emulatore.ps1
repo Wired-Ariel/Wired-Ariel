@@ -23,11 +23,11 @@
 # resta il test LOCALE di sempre (relay sul PC dell'amico). Per usare l'mGBA
 # come TERZO GIOCATORE di una partita via internet si passa il relay pubblico
 # e un peer-id unico della stanza, es.:
-#   ... -Relay "IP-DI-LUCA:9000" -Stanza 58243 -PeerId 3
+#   ... -Relay "IP-DI-LUCA:9000" -Stanza 4242 -PeerId 3
 param(
     [string]$Relay = "127.0.0.1:9000",
     [ValidateRange(1, 65535)]
-    [int]$Stanza = 58243,
+    [int]$Stanza = 4242,
     # peer-id del PONTE EMULATORE (l'altro .bat, quello del GBA locale, usa
     # PeerId+1: nel test locale restano 1 e 2 come sempre)
     [ValidateRange(1, 65534)]

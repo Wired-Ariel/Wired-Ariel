@@ -64,7 +64,7 @@ LOG_DIR = os.environ.get("PANNELLO_LOG") or os.path.join(QUI, "log")
 CONFIG_DEFAULT = {
     "ruolo": "ospite",        # "ospite" = ospito io il relay | "amico" = mi collego
     "relay": "127.0.0.1:9000",
-    "stanza": 58243,
+    "stanza": 4242,
     "timing": 7400,
     "peer": 0,                # 0 = automatico (ospite->1, amico->2); in 3+ va scelto a mano
     "cavo": "auto",

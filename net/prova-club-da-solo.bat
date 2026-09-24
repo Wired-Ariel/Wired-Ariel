@@ -9,5 +9,5 @@ rem Il finto fa la parte dell'amico: scala, blocco giocatore, schede.
 rem Criterio di vittoria: "LINKUP COMPLETO" in questa finestra e il tuo
 rem GBA che entra nella saletta.
 cd /d "%~dp0"
-python -u finto_club.py --relay 127.0.0.1:9000 --room 58243 --peer-id 2
+python -u finto_club.py --relay 127.0.0.1:9000 --room 4242 --peer-id 2
 pause

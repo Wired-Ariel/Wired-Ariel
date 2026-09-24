@@ -95,7 +95,7 @@ class TestValidazione(unittest.TestCase):
         self.assertFalse(self.p.aggiorna_config({"stanza": 70000})[0])
         self.assertFalse(self.p.aggiorna_config({"stanza": "ciao"})[0])
         self.assertFalse(self.p.aggiorna_config({"timing": 10})[0])
-        self.assertTrue(self.p.aggiorna_config({"stanza": 58243})[0])
+        self.assertTrue(self.p.aggiorna_config({"stanza": 4242})[0])
 
     def test_config_non_valida_non_tocca_quella_buona(self):
         self.p.aggiorna_config({"stanza": 4242})
@@ -120,7 +120,7 @@ class TestSintesi(unittest.TestCase):
         self.p.riga("gioca", "[client 1] rtt 31 ms | inviati 42 | ricevuti 17 "
                              "| scartati 0 dup + 0 arretrati | ricuciti 0 (+0 "
                              "larghi) | persi dal simulatore 0 | VIA 0 | "
-                             "stanza 58243 | io su mappa 10.6")
+                             "stanza 4242 | io su mappa 10.6")
         self.assertEqual(self.p.sintesi["mappa"], "10.6")
         self.assertEqual(self.p.sintesi["inviati"], 42)
         self.assertEqual(self.p.sintesi["ricevuti"], 17)
@@ -244,7 +244,7 @@ class TestServer(unittest.TestCase):
         porta_relay = porta_libera()
         r = self.post("/api/config", {"ruolo": "ospite",
                                       "relay": "127.0.0.1:%d" % porta_relay,
-                                      "stanza": 58243})
+                                      "stanza": 4242})
         self.assertTrue(r["ok"], r.get("messaggio"))
 
         r = self.post("/api/avvia", {"cosa": "relay"})

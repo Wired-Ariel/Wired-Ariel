@@ -30,6 +30,10 @@ camminano con l'animazione vera del gioco.
 > The software was written by **Claude (Anthropic)** in guided sessions, with all hardware
 > testing done by Lain.
 
+> ⚠️ **A tuo rischio.** Il programma non scrive mai il salvataggio, ma esegue codice dentro il gioco sulla tua
+> cartuccia originale, e **non ha nessuna garanzia** (GPL-3.0). Se puoi, **fai prima un backup del salvataggio**
+> (con un dumper di cartucce o una flash cart; in mGBA basta copiare il file `.sav`).
+
 ---
 
 ## Indice

@@ -343,7 +343,7 @@ class Relay:
             self.broadcast(peer, data)
             if self.verbose:
                 # La stanza e' un numero, NON una mappa: stamparla come "%d.%d"
-                # la faceva leggere come group.number (58243 -> "227.131") e
+                # la faceva leggere come group.number (4242 -> "16.146") e
                 # il 2026-08-02 e' costato mezz'ora di sospetto sulla stanza
                 # sbagliata, mentre era giusta. Formato uguale a quello che
                 # l'utente scrive in --room.

@@ -58,7 +58,7 @@ sudo journalctl -u gba-relay -f        # il log del relay, dal vivo
 ## 4. Pacchetti che puntano al VPS
 
 ```powershell
-.\tools\prepara-pacchetto-amico.ps1 -Relay IP-DEL-VPS:9000 -Stanza 58243
+.\tools\prepara-pacchetto-amico.ps1 -Relay IP-DEL-VPS:9000 -Stanza 4242
 ```
 
 Chi vuole provare con un altro amico cambia solo la **stanza** dal pannello

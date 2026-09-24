@@ -993,7 +993,7 @@ end
 -- costare un nuovo download, quindi ci sono altre due strade, e vincono in
 -- quest'ordine:
 --
---   1. i comandi dalla console di mGBA:  stanza(58243)  peer(7)  relay("ws://...")
+--   1. i comandi dalla console di mGBA:  stanza(4242)  peer(7)  relay("ws://...")
 --   2. il file passotile-config.lua accanto allo script
 --   3. i valori scritti nello script (quelli del sito)
 --
@@ -1110,7 +1110,7 @@ local function relayStart()
     LOG.riga(string.format(
         "\nCONFIGURAZIONE ATTIVA\n  relay   : %s\n  stanza  : %d\n  peer    : %d\n"
         .. "  origine : %s\n", RELAY_URL, RELAY_ROOM, RELAY_PEER, cfgOrigine))
-    console:log("[rete ] per cambiare al volo:  stanza(58243)   peer(7)   "
+    console:log("[rete ] per cambiare al volo:  stanza(4242)   peer(7)   "
                 .. "relay(\"ws://host/ws\")  - resta salvato per la prossima volta")
     wsConnect()
 end

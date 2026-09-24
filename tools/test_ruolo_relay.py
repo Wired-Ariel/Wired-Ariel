@@ -208,10 +208,10 @@ class TestRuoloRelay(unittest.TestCase):
         contratto con se stesso, e si rompe in silenzio (config ignorata =
         stanza sbagliata = 'non ci vediamo')."""
         scritto = ('-- scritto dal ruolo relay di gen3-poke-multiplayer\n'
-                   'return { stanza = 58243, peer = 7, relay = "ws://host/ws" }\n')
+                   'return { stanza = 4242, peer = 7, relay = "ws://host/ws" }\n')
         dati = self.lua.execute(
             ('local f = load(%r, "cfg", "t", {}); return f()' % scritto).encode())
-        self.assertEqual(dati[b"stanza"], 58243)
+        self.assertEqual(dati[b"stanza"], 4242)
         self.assertEqual(dati[b"peer"], 7)
         self.assertEqual(dati[b"relay"], b"ws://host/ws")
 
@@ -272,7 +272,7 @@ class TestScriptDalSito(unittest.TestCase):
     # Le stesse tre righe di app.js: un CONTRATTO con build.ps1.
     RIGHE = (
         (r"^RELAY_URL\s*=.*$", 'RELAY_URL = "ws://host/passotile/ws"'),
-        (r"^RELAY_ROOM\s*=.*$", "RELAY_ROOM = 58243"),
+        (r"^RELAY_ROOM\s*=.*$", "RELAY_ROOM = 4242"),
         (r"^RELAY_PEER\s*=.*$", "RELAY_PEER = 0"),
     )
 
