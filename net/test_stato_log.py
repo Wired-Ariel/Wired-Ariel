@@ -52,6 +52,10 @@ class BridgeFinto(C.Bridge):
         self.pos_sporche = False
         # gli slot avatar (fino a 4 giocatori): campi toccati da slot_for
         self.peer_slots = {}
+        # client.py dal 2026-08-30 (va-e-vieni): il finto bridge deve avere gli
+        # stessi campi del vero, o slot_for() cade su un AttributeError.
+        self.peer_andato_at = {}
+        self.flap = 0
         self.slot_free = [0, 1, 2]
         self.slot_pieni_avvisati = set()
         self.slot_scartati = 0

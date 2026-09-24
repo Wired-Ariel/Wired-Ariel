@@ -297,7 +297,7 @@ $configPannello = @{
 # carriage return + "icevuti". I valori variabili si inseriscono dopo, con
 # -replace su segnaposto.
 $leggimi = @'
-# Pokemon Smeraldo — camminare insieme via internet
+# Pokemon Smeraldo - camminare insieme via internet
 
 Questo pacchetto ti fa vedere Lain nel tuo overworld (e te nel suo), su GBA
 vero e cartuccia vera, senza modificare niente: ne' la cartuccia ne' il
@@ -308,7 +308,7 @@ USB (la scheda col Pico), il **cavo link GBA** e un PC Windows.
 
 ---
 
-## Parte 1 — Setup, si fa UNA volta sola (~15 minuti)
+## Parte 1 - Setup, si fa UNA volta sola (~15 minuti)
 
 ### 1. Python: niente da fare
 Python e' **gia' dentro il pacchetto** (cartella `python\`): non devi
@@ -322,7 +322,7 @@ Windows da solo non sa parlare con l'adattatore. Serve **Zadig**:
 https://zadig.akeo.ie/
 
 1. Collega l'adattatore al PC via USB.
-2. Apri Zadig → menu **Options → List All Devices**.
+2. Apri Zadig -> menu **Options -> List All Devices**.
 3. Nella tendina scegli il dispositivo con **USB ID 2FE3 000A**.
 4. Come driver di destinazione scegli **WinUSB** e premi **Install Driver**.
 
@@ -344,18 +344,18 @@ doppio clic su **`0-prova-canale.bat`**. Cammina un po' nel gioco.
 
 **Criterio: nella finestra devono comparire eventi che salgono (almeno 15 in
 30 secondi).** Se restano a zero, il problema e' tra cavo, verso del cavo e
-driver — non c'entra internet. Manda a Lain la schermata.
+driver - non c'entra internet. Manda a Lain la schermata.
 
 ---
 
-## Parte 2 — La checklist hardware, a OGNI sessione
+## Parte 2 - La checklist hardware, a OGNI sessione
 
 - L'interruttore **SW1 sulla scheda: su 3,3 V** (lato GBA).
 - **Cavo link GBA** collegato **nel verso marcato** sulla scheda.
 - **Slot cartuccia del GBA: VUOTO.**
 - Prima il cavo, **poi** accendi il GBA.
 
-## Parte 3 — Giocare (~1 minuto di avvio)
+## Parte 3 - Giocare (~1 minuto di avvio)
 
 **Apri `PANNELLO.bat`.** E' l'unica cosa da lanciare: si apre da solo nel
 browser ed e' gia' configurato (relay di Lain e stanza giusta). Lascia aperta
@@ -364,13 +364,13 @@ la finestra nera che compare: e' il motore.
 Dal pannello, in ordine:
 
 1. GBA acceso a slot vuoto (resta sul logo, e' giusto cosi').
-2. Premi **1 · Carica il gioco nel GBA**. In ~15 secondi lo schermo del GBA
+2. Premi **1 - Carica il gioco nel GBA**. In ~15 secondi lo schermo del GBA
    diventa **rosso**.
    - Se dice `nessuna risposta`: premilo di nuovo, una volta su tre serve.
 3. **Inserisci la cartuccia** nel GBA acceso (si', a caldo: e' voluto).
-   Lo schermo passa **giallo → verde** e parte Smeraldo. Carica la partita e
+   Lo schermo passa **giallo -> verde** e parte Smeraldo. Carica la partita e
    portati **all'aperto**.
-4. Premi **2 · Gioca**. In cima al pannello compaiono la tua mappa e i
+4. Premi **2 - Gioca**. In cima al pannello compaiono la tua mappa e i
    contatori; quando Lain e' collegato, il suo allenatore compare sulla tua
    mappa. Camminate.
 
@@ -391,7 +391,7 @@ Per chiudere: chiudi la finestra nera e spegni il GBA. Fine, non resta niente.
 
 | Cosa vedi | Cosa vuol dire | Cosa fare |
 |---|---|---|
-| `endpoint USB del Pico inceppato` o `il comando 'Cancel' non e' partito` | L'adattatore e' rimasto imbambolato dopo il multiboot | Premi **Sblocca adattatore** nel pannello, poi di nuovo **2 · Gioca**. **NON spegnere il GBA**: il programma vive in RAM e sopravvive |
+| `endpoint USB del Pico inceppato` o `il comando 'Cancel' non e' partito` | L'adattatore e' rimasto imbambolato dopo il multiboot | Premi **Sblocca adattatore** nel pannello, poi di nuovo **2 - Gioca**. **NON spegnere il GBA**: il programma vive in RAM e sopravvive |
 | Il browser non si apre da solo | Il PC non ha un browser di default impostato | Apri a mano **http://127.0.0.1:7411** |
 | `nessuna risposta ... fase detect` nel multiboot | Il GBA non ha risposto all'aggancio | Rilancia `1-multiboot.bat`. Se insiste: GBA spento/acceso e ricontrolla cavo e SW1 |
 | `DIREZIONE GBA->PC` nel client | Il PC non riceve dal GBA | Cavo nel verso sbagliato, o SW1 non su 3,3 V |
