@@ -27,6 +27,7 @@ net/log/
 
 # --- config locali ---
 passotile-config.lua
+net/pannello.config.json
 net/pannello.config.json.local
 .venv/
 .vscode/

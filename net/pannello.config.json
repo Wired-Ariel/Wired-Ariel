@@ -1,9 +1,0 @@
-{
-  "ruolo": "ospite",
-  "relay": "127.0.0.1:9000",
-  "stanza": 2700,
-  "timing": 7400,
-  "peer": 0,
-  "cavo": "auto",
-  "porta_relay": 9000
-}

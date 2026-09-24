@@ -116,7 +116,9 @@ pip install pyusb libusb-package
 net\PANNELLO.bat
 ```
 Si apre `http://127.0.0.1:7411`: stessi passi del sito (relay, multiboot, partita, sblocco),
-più i log completi. Ripiego a riga di comando: `net\1-multiboot.bat` poi `net\2-gioca-internet.bat`.
+più i log completi. Di default il pannello **ospita un relay sul tuo PC** (ruolo «ospite»): per
+collegarti al relay pubblico scegli il ruolo **«amico»** nelle impostazioni e come relay
+`wss://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/ws`. Ripiego a riga di comando: `net\1-multiboot.bat` poi `net\2-gioca-internet.bat`.
 
 ### C. Emulatore mGBA
 1. Sul sito scrivi la stanza e premi **«Scarica lo script per l'emulatore»**.

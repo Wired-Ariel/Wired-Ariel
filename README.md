@@ -111,7 +111,9 @@ pip install pyusb libusb-package
 net\PANNELLO.bat
 ```
 It opens `http://127.0.0.1:7411` (Italian UI): same steps as the website (relay, multiboot, game,
-unlock), plus the full logs. Command-line fallback: `net\1-multiboot.bat` then `net\2-gioca-internet.bat`.
+unlock), plus the full logs. By default the panel **hosts a relay on your own PC** (role «ospite»):
+to join the public relay instead, in the settings choose role **«amico»** and set the relay to
+`wss://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/ws`. Command-line fallback: `net\1-multiboot.bat` then `net\2-gioca-internet.bat`.
 
 ### C. mGBA emulator
 1. On the website, type the room and press **«Download the emulator script»**.
