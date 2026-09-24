@@ -386,7 +386,12 @@
    * giusto e non lo e': un utente non ha modo di accorgersene, e il sintomo
    * sarebbe "non ci vediamo" senza nessuna causa visibile.
    */
-  var TEMPLATE_LUA = "passotile-emulatore.lua";
+  // Un modello per ROM (2026-09-24): Smeraldo italiano (BPEI) o Emerald inglese
+  // USA/Europa (BPEE). I due script sono uguali tranne i simboli del gioco, e
+  // ognuno rifiuta la ROM dell'altro con un messaggio chiaro.
+  var TEMPLATE_LUA = { it: "passotile-emulatore.lua", usa: "passotile-emulatore-usa.lua" };
+  var CHIAVE_ROM = "passotile.romlua";
+  function romLua() { var s = $("rom-lua"); return s && s.value === "usa" ? "usa" : "it"; }
 
   function configuraLua(testo, url, stanza, peer) {
     var righe = [
@@ -417,7 +422,8 @@
     if (err) { errore(err); return; }
     var r = relayPerLua(cfg.relay);
     try {
-      var resp = await fetch(TEMPLATE_LUA, { cache: "no-store" });
+      var rom = romLua();
+      var resp = await fetch(TEMPLATE_LUA[rom], { cache: "no-store" });
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       var testo = await resp.text();
       // peer 0 = lo sorteggia il Lua all'avvio: nessuno deve coordinare numeri.
@@ -443,10 +449,11 @@
       var out = configuraLua(testo, r.url, cfg.stanza, peerGioco);
       var a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([out], { type: "text/plain" }));
-      a.download = "gen3-poke-multiplayer-" + L("stanza", "room") + cfg.stanza + ".lua";
+      var nomeFile = "gen3-poke-multiplayer-" + L("stanza", "room") + cfg.stanza + (rom === "usa" ? "-eng" : "-ita") + ".lua";
+      a.download = nomeFile;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
-      log("[lua  ] scaricato gen3-poke-multiplayer-stanza" + cfg.stanza + ".lua: stanza " +
+      log("[lua  ] scaricato " + nomeFile + " (ROM " + (rom === "usa" ? "inglese" : "italiana") + "): stanza " +
           cfg.stanza + ", relay " + r.url + ", peer " + peerGioco +
           " (segnato anche qui come 'tuo numero di gioco': sulla mappa sarai «tu»)" +
           (r.degradato ? " (relay IN CHIARO: il Lua di mGBA non ha TLS)" : ""), "rete");
@@ -776,6 +783,13 @@
     $("btn-mappa").onclick = apriMappa;
     $("btn-spettatore").onclick = function () { avviaPartita(true); };
     $("btn-lua").onclick = scaricaLua;
+    // La ROM per lo script: ricordata; la prima volta si indovina dalla lingua della pagina.
+    var romSalvata = null;
+    try { romSalvata = localStorage.getItem(CHIAVE_ROM); } catch (e) { romSalvata = null; }
+    if ($("rom-lua")) {
+      $("rom-lua").value = (romSalvata === "it" || romSalvata === "usa") ? romSalvata : (EN ? "usa" : "it");
+      $("rom-lua").onchange = function () { try { localStorage.setItem(CHIAVE_ROM, romLua()); } catch (e) { /* niente */ } };
+    }
     $("mb-file").onchange = async function () {
       var f = $("mb-file").files[0];
       if (!f) return;

@@ -21,8 +21,9 @@ around it with the game's real animation.
 |---|---|---|
 | ![together](docs/img/foto-p3-73.png) | ![club](docs/img/2026-08-27-club-due-emulatori-saletta.png) | ![trade](docs/img/2026-08-27-SCAMBIO-FATTO-p1.png) |
 
-> ⚠️ **Currently works with the Italian release of Pokémon Emerald only.** The in-game screenshots are
-> in Italian for that reason. Most of the source code comments are in Italian too.
+> ⚠️ **Which versions work:** on a **real GBA**, the **Italian** Pokémon Emerald cartridge only, for now.
+> In the **emulator (mGBA)**, both the **Italian** and the **English (USA/Europe)** ROM — and they play
+> together. The in-game screenshots are in Italian because that's what we play. Most of the source code comments are in Italian too.
 >
 > ⚠️ **Use at your own risk.** The program never writes your save file, but it runs code inside the game on
 > your original cartridge, and it comes with **no warranty** (GPL-3.0). If you can, **back up your save first**
@@ -82,9 +83,11 @@ around it with the game's real animation.
   Pico via [Zadig](https://zadig.akeo.ie/).
 
 ### To play on an emulator
-- **mGBA 0.10 or later** (with Lua scripting) and **your own** dump of Italian Pokémon Emerald;
-- the mGBA script (download it from the website, already set up with your room, or grab
-  `gen3-poke-multiplayer-emulatore.lua` from the Releases).
+- **mGBA 0.10 or later** (with Lua scripting) and **your own** dump of Pokémon Emerald, **English (USA/Europe)
+  or Italian**;
+- the mGBA script matching your ROM (download it from the website, already set up with your room, or grab
+  from the Releases `gen3-poke-multiplayer-emulatore-usa.lua` for the English ROM or
+  `gen3-poke-multiplayer-emulatore.lua` for the Italian one).
 
 ### To just watch
 - any browser, Firefox included: **spectator** mode + Live map.
@@ -116,9 +119,10 @@ to join the public relay instead, in the settings choose role **«amico»** and 
 `wss://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/ws`. Command-line fallback: `net\1-multiboot.bat` then `net\2-gioca-internet.bat`.
 
 ### C. mGBA emulator
-1. On the website, type the room and press **«Download the emulator script»**.
-2. In mGBA load Italian Emerald, get into the overworld, then *Tools → Scripting → File →
-   Load script* → the downloaded script (`gen3-poke-multiplayer-roomN.lua`).
+1. On the website, type the room, pick your ROM (**English** or **Italian** Emerald) and press
+   **«Download the emulator script»**.
+2. In mGBA load your Emerald ROM, get into the overworld, then *Tools → Scripting → File →
+   Load script* → the downloaded script (`gen3-poke-multiplayer-roomN-eng.lua` or `-ita.lua`).
 3. Room and peer can also be changed in game: **L+R+B** opens a small panel (open it while standing still).
 
 ---
@@ -224,7 +228,8 @@ need a build of [pokeemerald](https://github.com/pret/pokeemerald) (devkitARM, i
 ```powershell
 .\build.ps1 -Syms it -WithSio          # payload for real GBA (Italian ROM + SIO driver)
 .\hw\mbstub\build.ps1                  # multiboot stub: embeds the payload JUST built
-.\build.ps1 -LinkRole relay -Syms it -OutName emulatore   # mGBA script
+.\build.ps1 -LinkRole relay -Syms it -OutName emulatore   # mGBA script, Italian ROM
+.\build.ps1 -LinkRole relay -Syms usa -OutName emulatore-usa   # mGBA script, English (USA/Europe) ROM
 python tools\gen_mappa.py              # Live map data (from the decomp + Italian names from the ROM)
 .\tools\prepara-sito-web.ps1 -Relay wss://your.host/ws -Stanza 0     # assembles the website
 ```
@@ -276,8 +281,11 @@ At most 4 players per room (the fifth is refused); spectators don't count.
 
 ## Known limitations
 
-- **Italian Pokémon Emerald only**, for now. US addresses exist (`-Syms usa`, it's the decomp's
-  ROM), but only the Italian cartridge has been tested on hardware.
+- **Real GBA: Italian cartridge only**, for now: the multiboot stub only accepts the Italian game
+  (with an English cartridge it just stays on the red screen). In the **emulator**, the Italian and the
+  English (USA/Europe) ROM both work and play together (tested on the public relay, 2026-09-24).
+  An English-cartridge stub is the next step: the addresses are known (the decomp *is* the English ROM),
+  but nobody on the team has an English cartridge to test it on hardware yet.
   FireRed/LeafGreen are the natural next step (`pokefirered` is decompiled too).
 - **16 object events per map**: a crowded map fits 2-3 friends. From the fourth friend on
   there's no avatar, but they stay on the Live map.

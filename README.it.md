@@ -26,7 +26,7 @@ camminano con l'animazione vera del gioco.
 > multiboot *before* the cartridge boots, hooks the IRQ vector, and draws remote players as
 > native object events driven by the game's own movement actions. Transport: GBA link cable →
 > Raspberry Pi Pico (patched Celio firmware) → USB/WebUSB → UDP/WebSocket relay. Up to 4
-> players, mixed hardware + mGBA emulator + browser. Currently targets the **Italian** Emerald ROM.
+> players, mixed hardware + mGBA emulator + browser. Real GBA: **Italian** cartridge. Emulator: **Italian or English** ROM.
 > The software was written by **Claude (Anthropic)** in guided sessions, with all hardware
 > testing done by Lain.
 
@@ -88,8 +88,9 @@ camminano con l'animazione vera del gioco.
   Pico con [Zadig](https://zadig.akeo.ie/).
 
 ### Per giocare in emulatore
-- **mGBA 0.10 o successivo** (con scripting Lua) e il **tuo** dump di Pokémon Smeraldo italiano;
-- lo script per mGBA (lo scarichi dal sito già configurato con la tua stanza, o `gen3-poke-multiplayer-emulatore.lua` dalle Releases).
+- **mGBA 0.10 o successivo** (con scripting Lua) e il **tuo** dump di Pokémon Smeraldo, **italiano o inglese (USA/Europa)**;
+- lo script per mGBA adatto alla tua ROM (lo scarichi dal sito già configurato con la tua stanza, o dalle Releases:
+  `gen3-poke-multiplayer-emulatore.lua` per la ROM italiana, `gen3-poke-multiplayer-emulatore-usa.lua` per quella inglese).
 
 ### Per guardare e basta
 - un browser qualsiasi, anche Firefox: modalità **spettatore** + Mappa live.
@@ -121,9 +122,10 @@ collegarti al relay pubblico scegli il ruolo **«amico»** nelle impostazioni e 
 `wss://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/ws`. Ripiego a riga di comando: `net\1-multiboot.bat` poi `net\2-gioca-internet.bat`.
 
 ### C. Emulatore mGBA
-1. Sul sito scrivi la stanza e premi **«Scarica lo script per l'emulatore»**.
-2. In mGBA carica Smeraldo italiano, arriva nell'overworld, poi *Tools → Scripting → File →
-   Load script* → lo script scaricato (`gen3-poke-multiplayer-stanzaN.lua`).
+1. Sul sito scrivi la stanza, scegli la tua ROM (Smeraldo **italiano** o Emerald **inglese**) e premi
+   **«Scarica lo script per l'emulatore»**.
+2. In mGBA carica la tua ROM di Smeraldo, arriva nell'overworld, poi *Tools → Scripting → File →
+   Load script* → lo script scaricato (`gen3-poke-multiplayer-stanzaN-ita.lua` o `-eng.lua`).
 3. Stanza e peer si cambiano anche dentro il gioco: **L+R+B** apre un pannellino (aprilo da fermo).
 
 ---
@@ -229,7 +231,8 @@ anche una build di [pokeemerald](https://github.com/pret/pokeemerald) (devkitARM
 ```powershell
 .\build.ps1 -Syms it -WithSio          # payload per GBA vero (ROM italiana + driver SIO)
 .\hw\mbstub\build.ps1                  # stub multiboot: ingloba il payload APPENA costruito
-.\build.ps1 -LinkRole relay -Syms it -OutName emulatore   # script per mGBA
+.\build.ps1 -LinkRole relay -Syms it -OutName emulatore   # script per mGBA, ROM italiana
+.\build.ps1 -LinkRole relay -Syms usa -OutName emulatore-usa   # script per mGBA, ROM inglese (USA/Europa)
 python tools\gen_mappa.py              # dati della Mappa live (dalla decomp + nomi IT dalla ROM)
 .\tools\prepara-sito-web.ps1 -Relay wss://tuo.host/ws -Stanza 0     # assembla il sito
 ```
@@ -280,8 +283,11 @@ Massimo 4 giocatori per stanza (il quinto viene rifiutato); gli spettatori non c
 
 ## Limiti noti
 
-- **Solo Pokémon Smeraldo italiano**, per ora. Gli indirizzi USA esistono (`-Syms usa`) ed è la
-  ROM della decomp, ma sul fisico è stata provata solo la cartuccia italiana.
+- **GBA vero: solo cartuccia italiana**, per ora: lo stub multiboot accetta solo il gioco italiano
+  (con una cartuccia inglese resta sullo schermo rosso). In **emulatore** funzionano sia la ROM italiana
+  sia quella inglese (USA/Europa), e giocano insieme (provato sul relay pubblico il 2026-09-24).
+  Lo stub per la cartuccia inglese è il prossimo passo: gli indirizzi si conoscono (la decomp *è* la ROM
+  inglese), ma nessuno di noi ha ancora una cartuccia inglese per provarlo sul fisico.
   Rosso Fuoco/Verde Foglia sono il prossimo passo naturale (anche `pokefirered` è decompilato).
 - **16 object event per mappa**: su una mappa affollata ci stanno 2-3 amici. Il quarto amico in su
   non ha avatar ma resta sulla Mappa live.

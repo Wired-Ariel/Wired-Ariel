@@ -96,6 +96,12 @@ if ($LASTEXITCODE -ne 0) { throw "build del template per l'emulatore fallita" }
 $luaSorgente = Join-Path $root "mgba\inject.emulatore.lua"
 if (-not (Test-Path $luaSorgente)) { throw "manca $luaSorgente dopo la build" }
 Copy-Item $luaSorgente $luaOut
+# Lo stesso modello per la ROM INGLESE (USA/Europa, BPEE), 2026-09-24: il sito fa
+# scegliere la ROM accanto a "Scarica lo script" e prende questo file per "usa".
+& (Join-Path $root "build.ps1") -LinkRole relay -RelayUrl $relayLua -RelayRoom $Stanza `
+    -RelayPeer 0 -Syms usa -OutName emulatore-usa | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "build del template per la ROM inglese fallita" }
+Copy-Item (Join-Path $root "mgba\inject.emulatore-usa.lua") (Join-Path $Out "passotile-emulatore-usa.lua")
 # La guardia che conta: le tre righe che il sito riscrivera' devono esserci.
 # Se build.ps1 cambiasse formato, meglio fermarsi qui che pubblicare un sito
 # il cui bottone fallisce in faccia all'utente.

@@ -252,6 +252,7 @@
       <div class="attrezzi">
         <button class="minore" id="btn-mappa">Mappa live ↗</button>
         <button class="minore" id="btn-spettatore">Guarda soltanto (spettatore)</button>
+        <label class="minore" style="cursor:pointer;padding:0 12px" title="La ROM che usi in mGBA: lo script deve essere della stessa versione">ROM per mGBA: <select id="rom-lua" style="font-size:12px"><option value="it">Smeraldo italiano</option><option value="usa">Emerald inglese (USA/EU)</option></select></label>
         <button class="minore" id="btn-lua" title="Scarica lo script gia' configurato con la stanza qui sopra: si carica in mGBA e basta">Scarica lo script per l'emulatore ↓</button>
         <button class="minore" id="btn-riavvia" disabled>Riavvia il Pico (F-4)</button>
         <button class="minore" id="btn-scollega" disabled>Scollega il Pico</button>
@@ -266,7 +267,7 @@
         al relay e vedi gli altri muoversi, senza mandare niente — e <b>senza occupare uno dei 4 posti</b> della stanza,
         quindi si può guardare anche a partita piena. Se stai giocando altrove (per esempio dentro mGBA), scrivi il
         numero di peer di quel client fra le Impostazioni: sulla mappa ti ritrovi come <b>«tu»</b>, in azzurro.</p>
-      <p class="aiuto" style="margin:8px 0 0"><b>Giochi dentro mGBA?</b> Premi <b>Scarica lo script per l'emulatore</b>:
+      <p class="aiuto" style="margin:8px 0 0"><b>Giochi dentro mGBA?</b> Scegli la tua ROM (Smeraldo italiano o Emerald inglese) e premi <b>Scarica lo script per l'emulatore</b>:
         ti viene giù un file <code>.lua</code> già scritto con la stanza qui sopra — lo carichi in mGBA
         (<i>Tools → Scripting → Load script</i>) e giochi, senza modificare niente a mano. Il numero di peer se lo
         sorteggia da solo. Per cambiare stanza dopo: riscarica, oppure scrivi <code>stanza(4242)</code> nella
