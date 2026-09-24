@@ -1,57 +1,59 @@
-# Componenti di terze parti
+# Third-party components
 
-Il codice di questo repository è rilasciato sotto **GPL-3.0** (`LICENSE`). Alcune parti derivano da
-progetti di altri, con le licenze qui sotto: tutte compatibili con GPL-3.0.
+> 🇮🇹 Versione italiana: [THIRD_PARTY_NOTICES.it.md](THIRD_PARTY_NOTICES.it.md)
 
-## Codice incluso o derivato
+The code in this repository is released under **GPL-3.0** (`LICENSE`). Some parts derive from
+other people's projects, under the licenses below: all compatible with GPL-3.0.
 
-| Dove | Origine | Licenza |
+## Included or derived code
+
+| Where | Origin | License |
 |---|---|---|
-| `hw/firmware/*.patch` (e il `celio.uf2` delle Releases) | [Celio-Link/Celio-Firmware](https://github.com/Celio-Link/Celio-Firmware), patch sul commit `f67733c` | GPL-3.0 |
-| `net/club_link.py`, `net/protocol.py`, `net/usb_link.py`, `net/club_mgba.py`, `web/js/club.js`, `web/js/device.js` | logica di sessione e protocollo del device portata da [Celio-Server](https://github.com/Celio-Link/Celio-Server) e [Celio-Client](https://github.com/Celio-Link/Celio-Client) | GPL-3.0 |
-| `mgba/websocket/` | presa da [Celio-mGBA-Link](https://github.com/Celio-Link/Celio-mGBA-Link) (GPL-3.0), che a sua volta usa i file sotto | vedi sotto |
+| `hw/firmware/*.patch` (and `celio.uf2` in the Releases) | [Celio-Link/Celio-Firmware](https://github.com/Celio-Link/Celio-Firmware), patch on commit `f67733c` | GPL-3.0 |
+| `net/club_link.py`, `net/protocol.py`, `net/usb_link.py`, `net/club_mgba.py`, `web/js/club.js`, `web/js/device.js` | session logic and device protocol ported from [Celio-Server](https://github.com/Celio-Link/Celio-Server) and [Celio-Client](https://github.com/Celio-Link/Celio-Client) | GPL-3.0 |
+| `mgba/websocket/` | taken from [Celio-mGBA-Link](https://github.com/Celio-Link/Celio-mGBA-Link) (GPL-3.0), which in turn uses the files below | see below |
 | `mgba/websocket/frame.lua`, `handshake.lua`, `server.lua`, `server_client.lua`, `tools.lua` | [lipp/lua-websockets](https://github.com/lipp/lua-websockets) — Copyright (c) 2012 Gerhard Lipp | MIT |
-| `mgba/websocket/base64.lua` | [iskolbin/lbase64](https://github.com/iskolbin/lbase64) v1.5.3 | pubblico dominio / MIT |
-| `mgba/websocket/sha1.lua` | [Jeffrey Friedl, SHA-1 in pure Lua](https://regex.info/blog/lua/sha1) — Copyright 2009 Jeffrey Friedl («Feel free to use it as you like»; poi ridistribuito sotto MIT) | libera / MIT |
+| `mgba/websocket/base64.lua` | [iskolbin/lbase64](https://github.com/iskolbin/lbase64) v1.5.3 | public domain / MIT |
+| `mgba/websocket/sha1.lua` | [Jeffrey Friedl, SHA-1 in pure Lua](https://regex.info/blog/lua/sha1) — Copyright 2009 Jeffrey Friedl («Feel free to use it as you like»; later redistributed under MIT) | free / MIT |
 | `hw/gbalink-fw/` | [Lorenzooone/gb-link-firmware-reconfigurable](https://github.com/Lorenzooone/gb-link-firmware-reconfigurable) | GPL-3.0 (`hw/gbalink-fw/LICENSE`) |
-| `hw/gbalink-fw/main.c`, `tusb_config.h`, `usb_descriptors.*` | [TinyUSB](https://github.com/hathach/tinyusb) — Copyright (c) 2019 Ha Thach | MIT (intestazioni nei file) |
-| `hw/gbalink-fw/pio/` | [Raspberry Pi pico-examples](https://github.com/raspberrypi/pico-examples) — Copyright (c) 2020 Raspberry Pi (Trading) Ltd. | BSD-3-Clause (intestazioni nei file) |
+| `hw/gbalink-fw/main.c`, `tusb_config.h`, `usb_descriptors.*` | [TinyUSB](https://github.com/hathach/tinyusb) — Copyright (c) 2019 Ha Thach | MIT (headers in the files) |
+| `hw/gbalink-fw/pio/` | [Raspberry Pi pico-examples](https://github.com/raspberrypi/pico-examples) — Copyright (c) 2020 Raspberry Pi (Trading) Ltd. | BSD-3-Clause (headers in the files) |
 
-## Riferimenti usati per scrivere codice nostro (nessun file copiato)
+## References used to write our own code (no files copied)
 
-- [afska/gba-link-connection](https://github.com/afska/gba-link-connection) (MIT) e
+- [afska/gba-link-connection](https://github.com/afska/gba-link-connection) (MIT) and
   [Lorenzooone/PokemonGB_Online_Trades_and_Battles](https://github.com/Lorenzooone/PokemonGB_Online_Trades_and_Battles) (MIT):
-  il protocollo multiboot (`net/mb_multi.py`, `web/js/multiboot.js`). `hw/siotest/mbsend.py` *importa* `multiboot.py`
-  di Lorenzooone da una copia locale, se presente: non è incluso qui.
-- [GBATEK](https://problemkaputt.de/gbatek.htm) di Martin Korth: documentazione.
-- [pret/pokeemerald](https://github.com/pret/pokeemerald): indirizzi, offset delle struct e costanti del gioco
-  (`payload/game_types.h`, `payload/game_syms*.h`, i Lua). Sono **fatti sull'interfaccia del gioco**, non codice copiato;
-  pokeemerald non ha una licenza.
+  the multiboot protocol (`net/mb_multi.py`, `web/js/multiboot.js`). `hw/siotest/mbsend.py` *imports* Lorenzooone's
+  `multiboot.py` from a local copy, if present: it is not included here.
+- [GBATEK](https://problemkaputt.de/gbatek.htm) by Martin Korth: documentation.
+- [pret/pokeemerald](https://github.com/pret/pokeemerald): the game's addresses, struct offsets and constants
+  (`payload/game_types.h`, `payload/game_syms*.h`, the Lua scripts). These are **facts about the game's interface**, not copied
+  code; pokeemerald has no license.
 
-## Dipendenze che si installano a parte (non incluse)
+## Dependencies installed separately (not included)
 
-| Pacchetto | Serve a | Licenza |
+| Package | Used for | License |
 |---|---|---|
-| [pyusb](https://github.com/pyusb/pyusb) | pannello per PC, USB | BSD-3-Clause |
-| [libusb-package](https://github.com/pyocd/libusb-package) | pannello per PC, porta con sé libusb (LGPL-2.1) | Apache-2.0 |
-| [lupa](https://github.com/scoder/lupa) | solo alcuni test | MIT |
-| [mGBA](https://mgba.io/) | emulatore, per chi gioca da PC | MPL-2.0 |
-| [Zadig](https://zadig.akeo.ie/) | driver WinUSB su Windows | GPL-3.0 |
+| [pyusb](https://github.com/pyusb/pyusb) | PC panel, USB | BSD-3-Clause |
+| [libusb-package](https://github.com/pyocd/libusb-package) | PC panel, bundles libusb (LGPL-2.1) | Apache-2.0 |
+| [lupa](https://github.com/scoder/lupa) | some tests only | MIT |
+| [mGBA](https://mgba.io/) | emulator, for people playing on PC | MPL-2.0 |
+| [Zadig](https://zadig.akeo.ie/) | WinUSB driver on Windows | GPL-3.0 |
 
-## Materiale Nintendo / Game Freak
+## Nintendo / Game Freak material
 
-Il repository **non contiene ROM né salvataggi**. Contiene però **quattro piccole icone derivate dalla grafica del
-gioco** (`web/img/` e `net/img/`: il ciuffo d'erba alta, le orme di Treecko e Torchic e la favicon), e la
-**Mappa live** usa dati e sprite che `tools/gen_mappa.py` estrae dalla propria copia di pokeemerald, più le GIF
-di Nero/Bianco che `tools/sprite_bw.py` scarica a parte: quel materiale non è nel repository.
+This repository **contains no ROMs or save files**. It does contain **four small icons derived from the game's
+graphics** (`web/img/` and `net/img/`: the tall-grass tile, Treecko's and Torchic's footprints, and the favicon), and the
+**Live map** uses data and sprites that `tools/gen_mappa.py` extracts from your own copy of pokeemerald, plus the
+Black/White GIFs that `tools/sprite_bw.py` downloads separately: that material is not in the repository.
 
-Lo stub multiboot (`mbstub.gba` nelle Releases) contiene nell'intestazione il **logo Nintendo** di 156 byte,
-che il BIOS del GBA pretende per avviare qualsiasi programma: nel sorgente non c'è, `hw/mbstub/build.ps1`
-lo copia al momento della build da una ROM indicata da chi compila. È la prassi di tutto l'homebrew per GBA.
+The multiboot stub (`mbstub.gba` in the Releases) contains the 156-byte **Nintendo logo** in its header,
+which the GBA BIOS requires to boot any program: it is not in the source code, `hw/mbstub/build.ps1`
+copies it at build time from a ROM supplied by whoever builds it. This is standard practice for all GBA homebrew.
 
-Pokémon, Game Boy Advance e i nomi correlati sono marchi di Nintendo, Creatures Inc. e GAME FREAK inc.
+Pokémon, Game Boy Advance and related names are trademarks of Nintendo, Creatures Inc. and GAME FREAK inc.
 
-## Testo della licenza MIT di lua-websockets
+## lua-websockets MIT license text
 
 ```
 Copyright (c) 2012 by Gerhard Lipp <gelipp@gmail.com>

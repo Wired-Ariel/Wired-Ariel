@@ -1,33 +1,34 @@
-# Il relay su un VPS (ricetta, 2026-08-21)
+# Running the relay on a VPS
 
-Oggi il relay gira sul PC di Lain con una porta UDP aperta sul router: va bene
-per due amici, non per "chi vuole provare". Un VPS da pochi euro al mese lo
-rende stabile e indipendente dal PC di casa. `relay.py` e' libreria standard
-pura: niente da installare oltre Python 3.
+> 🇮🇹 Versione italiana: [RELAY-VPS.it.md](RELAY-VPS.it.md)
 
-Il relay NON conosce il formato dei 12 byte e NON fa nessun filtro per mappa:
-fa stanze UDP e basta (stanza = partita). Resta "opaco" anche sul VPS.
+A relay on your home PC with a UDP port forwarded on the router is fine for two friends, not for
+"anyone who wants to try". A VPS for a few euros a month makes it stable and independent from your
+home PC. `relay.py` is pure standard library: nothing to install besides Python 3.
 
-## 1. Il VPS
+The relay does NOT know the 12-byte format and does NOT filter by map:
+it manages UDP rooms and nothing else (room = game). It stays "opaque" on the VPS too.
 
-Qualunque Linux con IPv4 pubblico (Debian/Ubuntu, il taglio piu' piccolo basta:
-il relay muove poche decine di KB/s per partita). Aprire nel firewall del
-provider **UDP 9000** (o la porta che si sceglie).
+## 1. The VPS
 
-## 2. Copia e avvio a mano (prova)
+Any Linux with a public IPv4 (Debian/Ubuntu; the smallest size is enough:
+the relay moves a few tens of KB/s per game). Open **UDP 9000** (or whatever port you choose)
+in the provider's firewall.
+
+## 2. Copy and start it by hand (test)
 
 ```bash
 sudo apt-get install -y python3
 mkdir -p ~/gba-relay && cd ~/gba-relay
-# copiare qui, dal PC: net/relay.py e net/protocol.py (scp, WinSCP, quello che si vuole)
+# copy here, from your PC: net/relay.py and net/protocol.py (scp, WinSCP, whatever you like)
 python3 relay.py --port 9000
 ```
 
-Sul PC, nel pannello: ruolo "Mi collego a un amico", relay `IP-DEL-VPS:9000`,
-stessa stanza per tutti. Il log del relay deve mostrare `peer 1 -> stanza N` e
-`peer 2 -> stanza N`: e' il criterio.
+On the PC, in the panel: role "amico" (join a friend), relay `VPS-IP:9000`,
+same room for everyone. The relay log must show `peer 1 -> stanza N` and
+`peer 2 -> stanza N`: that's the success criterion.
 
-## 3. Come servizio (si riavvia da solo)
+## 3. As a service (restarts by itself)
 
 `/etc/systemd/system/gba-relay.service`:
 
@@ -52,38 +53,38 @@ sudo mkdir -p /opt/gba-relay && sudo cp relay.py protocol.py /opt/gba-relay/
 sudo systemctl daemon-reload
 sudo systemctl enable --now gba-relay
 sudo systemctl status gba-relay        # "active (running)"
-sudo journalctl -u gba-relay -f        # il log del relay, dal vivo
+sudo journalctl -u gba-relay -f        # the relay log, live
 ```
 
-## 4. Pacchetti che puntano al VPS
+## 4. Packages pointing to the VPS
 
 ```powershell
-.\tools\prepara-pacchetto-amico.ps1 -Relay IP-DEL-VPS:9000 -Stanza 4242
+.\tools\prepara-pacchetto-amico.ps1 -Relay VPS-IP:9000 -Stanza 4242
 ```
 
-Chi vuole provare con un altro amico cambia solo la **stanza** dal pannello
-(campo "Stanza"): il relay tiene stanze indipendenti. La stanza e' l'unica
-"password": numeri alti e non ovvi.
+To play with other friends you only change the **room** in the panel
+(the "Stanza" field): the relay keeps rooms independent. The room is the only
+"password": use high, non-obvious numbers.
 
-## 5. Con il pannello web (2026-08-23): relay_ws.py + Caddy
+## 5. With the web panel: relay_ws.py + Caddy (or nginx)
 
-I browser parlano WebSocket, e la pagina e' https, quindi il relay deve
-rispondere in `wss://`. Sul VPS si aggiungono due cose: `relay_ws.py` (il
-frontale WebSocket davanti a `relay.py`, solo stdlib) e **Caddy**, che fa
-https/wss con il certificato da solo e serve anche la pagina statica. Serve
-un nome DNS che punti all'IP del VPS (un sottodominio gratuito va bene).
+Browsers speak WebSocket, and the page is https, so the relay must
+answer on `wss://`. On the VPS you add two things: `relay_ws.py` (the
+WebSocket front end in front of `relay.py`, stdlib only) and **Caddy**, which does
+https/wss with its own certificate and also serves the static page. You need
+a DNS name pointing to the VPS IP (a free subdomain is fine).
 
 ```bash
-sudo cp relay_ws.py /opt/gba-relay/          # accanto a relay.py e protocol.py
+sudo cp relay_ws.py /opt/gba-relay/          # next to relay.py and protocol.py
 sudo apt-get install -y caddy                # https://caddyserver.com/docs/install
-sudo mkdir -p /var/www/passotile             # qui il contenuto di build/sito-web (prepara-sito-web.ps1)
+sudo mkdir -p /var/www/passotile             # put the content of build/sito-web here (prepara-sito-web.ps1)
 ```
 
 `/etc/systemd/system/gba-relay-ws.service`:
 
 ```ini
 [Unit]
-Description=GBA overworld-link relay, frontale WebSocket
+Description=GBA overworld-link relay, WebSocket front end
 After=network.target gba-relay.service
 
 [Service]
@@ -97,10 +98,10 @@ RestartSec=3
 WantedBy=multi-user.target
 ```
 
-`/etc/caddy/Caddyfile` (sostituire il nome):
+`/etc/caddy/Caddyfile` (replace the name):
 
 ```
-passotile.esempio.it {
+relay.example.com {
     root * /var/www/passotile
     file_server
     reverse_proxy /ws 127.0.0.1:9001
@@ -111,23 +112,28 @@ passotile.esempio.it {
 sudo systemctl daemon-reload
 sudo systemctl enable --now gba-relay-ws
 sudo systemctl reload caddy
-curl https://passotile.esempio.it/ws          # {"relay_ws": true, ...}: il frontale risponde dietro Caddy
+curl https://relay.example.com/ws          # {"relay_ws": true, ...}: the front end answers behind Caddy
 ```
 
-Nel pannello web: relay `wss://passotile.esempio.it/ws`, stessa stanza per
-tutti. `relay_ws.py --bind 127.0.0.1` apposta: dall'esterno si entra SOLO da
-Caddy (https). La 9000 UDP resta aperta per chi gioca da mGBA/GBA con
-`client.py`: stanno nelle stesse stanze dei browser.
+In the web panel: relay `wss://relay.example.com/ws`, same room for
+everyone. `relay_ws.py --bind 127.0.0.1` on purpose: from outside you can ONLY get in through
+Caddy (https). UDP 9000 stays open for people playing from mGBA/GBA with
+`client.py`: they share the same rooms as the browsers.
 
-Non eseguito su un VPS vero (2026-08-23): provato in locale (`net/test_relay_ws.py`
-e la pagina contro `ws://127.0.0.1:9001`). La prima volta: `curl` qui sopra,
-poi `bridge_test.html?relay=wss://passotile.esempio.it/ws` deve dare 32 ok.
+**With nginx instead of Caddy** (this is what the project's public relay uses): include
+[`nginx-passotile.conf`](nginx-passotile.conf) in a vhost that already has a certificate. It also
+limits each IP to 8 relay connections (`limit_conn`), so nobody can clog the relay for everyone else.
 
-## Cosa NON fa questa ricetta
+**The mGBA script has no TLS**: it speaks plain `ws://`. If emulator players use your relay, expose the
+WebSocket path in plain HTTP on port 80 too (without redirecting it to https), otherwise mGBA
+fails the handshake with `HTTP/1.1 301`.
 
-- Niente TLS/autenticazione: il relay vede 12 byte opachi per evento, non dati
-  personali, e la stanza e' l'unica difesa. Se un giorno il relay diventa
-  pubblico per davvero, serve almeno un rate-limit per IP (relay.py non ce l'ha).
-- Niente IPv6, niente DNS dinamico: il VPS ha un IP fisso, e' il suo pregio.
-- Non e' stata eseguita su un VPS vero: e' la procedura, da provare la prima
-  volta con `relay.py --port 9000` a mano e i due client che si vedono.
+First run check: the `curl` above, then `bridge_test.html?relay=wss://relay.example.com/ws`
+must pass all its tests.
+
+## What this recipe does NOT do
+
+- No authentication: the relay sees 12 opaque bytes per event, no personal data, and the room is
+  the only protection. For a public relay, add a per-IP limit (as in `nginx-passotile.conf`):
+  `relay.py` itself has none.
+- No IPv6, no dynamic DNS: a VPS has a fixed IP, and that's its strength.

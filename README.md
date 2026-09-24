@@ -260,7 +260,7 @@ screen next to the payload's counters.
 ## Hosting your own relay
 
 The relay is pure Python (`net/relay.py`, UDP) plus a WebSocket front end (`net/relay_ws.py`) for
-browsers. Full guide for a VPS with nginx/Caddy and HTTPS (in Italian): [`net/RELAY-VPS.md`](net/RELAY-VPS.md);
+browsers. Full guide for a VPS with nginx/Caddy and HTTPS: [`net/RELAY-VPS.md`](net/RELAY-VPS.md);
 ready-made nginx block: [`net/nginx-passotile.conf`](net/nginx-passotile.conf).
 
 ```bash

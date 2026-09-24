@@ -264,7 +264,7 @@ accanto ai contatori del payload.
 ## Ospitare il proprio relay
 
 Il relay è Python puro (`net/relay.py`, UDP) più un frontale WebSocket (`net/relay_ws.py`) per i
-browser. Guida completa per una VPS con nginx/Caddy e HTTPS: [`net/RELAY-VPS.md`](net/RELAY-VPS.md);
+browser. Guida completa per una VPS con nginx/Caddy e HTTPS: [`net/RELAY-VPS.it.md`](net/RELAY-VPS.it.md);
 blocco nginx pronto: [`net/nginx-passotile.conf`](net/nginx-passotile.conf).
 
 ```bash
@@ -330,8 +330,8 @@ correzione, con ogni modifica accompagnata da una procedura di test e un contato
 Pokémon, Game Boy Advance e i nomi correlati sono marchi di Nintendo, Creatures Inc. e GAME FREAK inc.
 Questo è un progetto amatoriale senza fini di lucro, **non affiliato né approvato** da loro.
 Il repository **non contiene** ROM né salvataggi: serve la propria cartuccia originale. Contiene solo quattro piccole
-icone derivate dalla grafica del gioco, elencate con tutto il resto in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+icone derivate dalla grafica del gioco, elencate con tutto il resto in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.it.md).
 
 Codice rilasciato sotto **GPL-3.0** (vedi [`LICENSE`](LICENSE)), come i progetti Celio da cui deriva in parte.
 Il firmware `celio.uf2` delle Releases è Celio-Firmware (GPL-3.0) al commit `f67733c` più la patch in
-`hw/firmware/`: quello è il suo sorgente completo. Componenti di terze parti e licenze: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+`hw/firmware/`: quello è il suo sorgente completo. Componenti di terze parti e licenze: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.it.md).
