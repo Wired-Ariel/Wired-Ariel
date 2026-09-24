@@ -16,8 +16,16 @@
 # Uso:
 #     .\build.ps1
 #     .\build.ps1 -LogoFrom "C:\percorso\a\una\rom.gba"
+#     .\build.ps1 -Syms usa      # cartuccia INGLESE (BPEE): esce mbstub-usa.gba
+#                                  (prima: cd overworld-link ; .\build.ps1 -Syms usa -WithSio)
 
 param(
+    # La versione della cartuccia (2026-09-24): "it" = Smeraldo italiano (BPEI,
+    # mbstub.gba), "usa" = Emerald inglese USA/Europa (BPEE, mbstub-usa.gba).
+    # Il payload inglobato DEVE essere della stessa versione: lo controlla la
+    # guardia "versione" qui sotto.
+    [ValidateSet("it", "usa")]
+    [string]$Syms = "it",
     [string]$LogoFrom = "",
     [string]$Title = "MBSTUB",
     [string]$PayloadBin = ""
@@ -28,6 +36,7 @@ $root  = $PSScriptRoot
 $owl   = Split-Path (Split-Path $root -Parent) -Parent   # overworld-link
 $repo  = Split-Path $owl -Parent                          # radice del progetto
 $build = Join-Path $root "build"
+$outName = if ($Syms -eq "usa") { "mbstub-usa" } else { "mbstub" }
 
 $MULTIBOOT_MAX = 0x3FF40
 
@@ -85,6 +94,28 @@ if (Test-Path $payloadMap) {
     Write-Warning "build\payload.map assente: non posso verificare che il payload abbia il driver SIO dentro."
 }
 
+# LA VERSIONE DEL PAYLOAD DEVE ESSERE QUELLA DELLO STUB (2026-09-24). Il payload
+# confronta gMain.callback2 con l'indirizzo ASSOLUTO di CB2_Overworld, che nella
+# ROM italiana e in quella inglese e' diverso: un payload dell'altra lingua
+# partirebbe, e resterebbe muto per sempre. Il suo binario contiene quel
+# indirizzo come costante: si cerca quello giusto e si esclude l'altro.
+$cb2Atteso = if ($Syms -eq "usa") { 0x08085E5C } else { 0x08085E70 }
+$cb2Altro  = if ($Syms -eq "usa") { 0x08085E70 } else { 0x08085E5C }
+$pbytes = [System.IO.File]::ReadAllBytes($PayloadBin)
+$ptext  = [System.Text.Encoding]::GetEncoding(28591).GetString($pbytes)
+function Contiene([uint32]$v) {
+    foreach ($x in @($v, ($v -bor 1))) {
+        $s = [System.Text.Encoding]::GetEncoding(28591).GetString([BitConverter]::GetBytes([uint32]$x))
+        if ($ptext.IndexOf($s, [System.StringComparison]::Ordinal) -ge 0) { return $true }
+    }
+    return $false
+}
+if (-not (Contiene $cb2Atteso) -or (Contiene $cb2Altro)) {
+    throw ("build\payload.bin non e' della versione $Syms (CB2_Overworld atteso 0x{0:X8}). " -f $cb2Atteso) +
+          "Rifai  .\build.ps1 -Syms $Syms -WithSio  e poi questo script con -Syms $Syms."
+}
+Write-Output ("versione  : {0} (payload con CB2_Overworld 0x{1:X8}, stub -> {2}.gba)" -f $Syms, $cb2Atteso, $outName)
+
 $payloadSize = (Get-Item $PayloadBin).Length
 $roomBelowHandoff = $HANDOFF_BASE - $PAYLOAD_BASE
 
@@ -133,6 +164,7 @@ payload_bin_end:
 # --- compilazione ------------------------------------------------------------
 $common = @("-mcpu=arm7tdmi", "-mthumb-interwork", "-ffreestanding", "-fno-builtin",
             "-fno-strict-aliasing", "-O2", "-Wall", "-Wextra", "-I", $root)
+if ($Syms -eq "usa") { $common += "-DMBSTUB_SYMS_USA" }
 
 & $gcc @common -marm  -c (Join-Path $root "crt0.S")    -o (Join-Path $build "crt0.o")
 if ($LASTEXITCODE -ne 0) { throw "compilazione di crt0.S fallita" }
@@ -146,21 +178,21 @@ if ($LASTEXITCODE -ne 0) { throw "compilazione di main.c fallita" }
 & $gcc @common -marm  -c $blobPath -o (Join-Path $build "payload_blob.o")
 if ($LASTEXITCODE -ne 0) { throw "compilazione del blob fallita" }
 
-$mapArg = "-Wl,-Map," + (Join-Path $build "mbstub.map")
+$mapArg = "-Wl,-Map," + (Join-Path $build "$outName.map")
 
 & $gcc @common -nostdlib -nostartfiles `
     -T (Join-Path $root "mbstub.ld") $mapArg `
     (Join-Path $build "crt0.o") (Join-Path $build "main.o") `
     (Join-Path $build "handoff.o") (Join-Path $build "payload_blob.o") `
-    -o (Join-Path $build "mbstub.elf")
+    -o (Join-Path $build "$outName.elf")
 if ($LASTEXITCODE -ne 0) { throw "link fallito" }
 
-& $objcopy -O binary (Join-Path $build "mbstub.elf") (Join-Path $build "mbstub.gba")
+& $objcopy -O binary (Join-Path $build "$outName.elf") (Join-Path $build "$outName.gba")
 
 # --- quanto occupa davvero handoff.S ----------------------------------------
 # Non e' curiosita': e' il numero che dice quanti byte della coda restano al
 # payload quando un giorno il driver SIO ci entrera' dentro.
-$mapText = Get-Content (Join-Path $build "mbstub.map") -Raw
+$mapText = Get-Content (Join-Path $build "$outName.map") -Raw
 $hs = [regex]::Match($mapText, "0x0*([0-9a-f]{8})\s+__handoff_start")
 $he = [regex]::Match($mapText, "0x0*([0-9a-f]{8})\s+__handoff_end")
 if ($hs.Success -and $he.Success) {
@@ -201,7 +233,7 @@ if (($PAYLOAD_BASE + $reservedSize) -gt $HANDOFF_BASE) {
 # inserimento a caldo). handoff.S invece si', ed e' la parte a esito incerto:
 # lo si scrive in EWRAM e lo si fa partire dal vettore IRQ, che e' il modo in
 # cui ci arriverebbe comunque. Vedi mgba\handoff_test_body.lua.
-& $objcopy -O binary --only-section=.handoff (Join-Path $build "mbstub.elf") (Join-Path $build "handoff.bin")
+& $objcopy -O binary --only-section=.handoff (Join-Path $build "$outName.elf") (Join-Path $build "handoff.bin")
 if ($LASTEXITCODE -ne 0) { throw "estrazione di .handoff fallita" }
 
 $handoffBytes = [System.IO.File]::ReadAllBytes((Join-Path $build "handoff.bin"))
@@ -270,7 +302,7 @@ if (-not $LogoFrom -or -not (Test-Path $LogoFrom)) {
 }
 Write-Output "logo da   : $LogoFrom"
 
-$bin = [System.IO.File]::ReadAllBytes((Join-Path $build "mbstub.gba"))
+$bin = [System.IO.File]::ReadAllBytes((Join-Path $build "$outName.gba"))
 if ($bin.Length -lt 0xC0) { throw "binario piu' corto dell'header: qualcosa non ha linkato" }
 
 $src = [System.IO.File]::ReadAllBytes($LogoFrom)
@@ -290,7 +322,7 @@ $sum = 0
 for ($i = 0xA0; $i -lt 0xBD; $i++) { $sum += $bin[$i] }
 $bin[0xBD] = [byte]((-($sum + 0x19)) -band 0xFF)
 
-[System.IO.File]::WriteAllBytes((Join-Path $build "mbstub.gba"), $bin)
+[System.IO.File]::WriteAllBytes((Join-Path $build "$outName.gba"), $bin)
 
 # --- controlli ---------------------------------------------------------------
 $size = $bin.Length
@@ -304,13 +336,13 @@ if ($bin[0x03] -ne 0xEA) {
 }
 Write-Output ("header    : branch ok, logo copiato, checksum 0x{0:X2}" -f $bin[0xBD])
 Write-Output ""
-Write-Output "Pronto: $((Join-Path $build 'mbstub.gba'))"
+Write-Output "Pronto: $((Join-Path $build ($outName + '.gba')))"
 Write-Output ""
 Write-Output "Sequenza (UN CAVO SOLO, UN FIRMWARE SOLO - dal 2026-08-02):"
 Write-Output "  1. Pico col firmware Celio celio-f1f2b-f3.uf2, SW1 su 3,3 V"
 Write-Output "  2. cavo GBA nel verso marcato - lo stesso del link in gioco"
 Write-Output "  3. GBA con lo SLOT CARTUCCIA VUOTO, acceso dopo aver collegato il cavo"
-Write-Output "  4. cd ..\..\net  poi  python mb_multi.py ..\hw\mbstub\build\mbstub.gba"
+Write-Output "  4. cd ..\..\net  poi  python mb_multi.py ..\hw\mbstub\build\$outName.gba"
 Write-Output "  5. schermo ROSSO -> inserisci la cartuccia -> giallo, verde, gioco"
 Write-Output "  6. poi, senza toccare niente: python usb_link.py --ascolta 30"
 Write-Output ""

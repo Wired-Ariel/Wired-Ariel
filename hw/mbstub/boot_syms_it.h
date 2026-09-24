@@ -116,6 +116,7 @@
  * proseguire sarebbe indovinare. */
 #define ADDR_GAMECODE            0x080000AC
 #define GAMECODE_BPEI            0x49455042  /* "BPEI" little-endian         */
+#define GAMECODE_EXPECTED        GAMECODE_BPEI  /* boot_syms_usa.h lo ridefinisce */
 #define ADDR_POOL_INTRMAIN       0x080006D0  /* deve contenere ADDR_INTR_MAIN */
 #define ADDR_POOL_INTRBUF        0x080006D4  /* deve contenere ADDR_INTR_MAIN_BUFFER */
 

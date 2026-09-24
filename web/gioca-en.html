@@ -240,6 +240,9 @@
       <h2>Game</h2>
       <p class="aiuto">In order: connect the Pico, then <b>empty cartridge slot</b>, cable, switch the GBA on and load the game;
         red screen ➜ insert the cartridge with the console on ➜ green ➜ play. Finally press Play once you're outdoors.</p>
+      <label class="campo" style="margin:4px 0 14px;max-width:420px"><span>Game version</span>
+        <select id="rom-lua"><option value="usa">Pokémon Emerald, English (USA/Europe)</option><option value="it">Pokémon Smeraldo, Italian</option></select>
+        <small class="guida">Used both for loading the GBA and for the emulator script. <b>English cartridge on a real GBA: new</b>, tested in the emulator but not yet on real hardware: if you try it, please tell us on GitHub.</small></label>
       <div class="passi">
         <div id="riga-pico"></div>
         <div id="riga-multiboot"></div>
@@ -252,7 +255,6 @@
       <div class="attrezzi">
         <button class="minore" id="btn-mappa">Live map ↗</button>
         <button class="minore" id="btn-spettatore">Just watch (spectator)</button>
-        <label class="minore" style="cursor:pointer;padding:0 12px" title="The ROM you use in mGBA: the script must match its version">mGBA ROM: <select id="rom-lua" style="font-size:12px"><option value="usa">English Emerald (USA/EU)</option><option value="it">Italian Emerald</option></select></label>
         <button class="minore" id="btn-lua" title="Download the script already set up with the room above: just load it in mGBA">Download the emulator script ↓</button>
         <button class="minore" id="btn-riavvia" disabled>Restart the Pico (F-4)</button>
         <button class="minore" id="btn-scollega" disabled>Disconnect the Pico</button>
@@ -267,7 +269,7 @@
         to the relay and see the others move, without sending anything — and <b>without taking one of the room's 4 seats</b>,
         so you can watch even when the game is full. If you're playing elsewhere (for example inside mGBA), enter
         that client's peer number in the Settings: on the map you'll show up as <b>«you»</b>, in light blue.</p>
-      <p class="aiuto" style="margin:8px 0 0"><b>Playing inside mGBA?</b> Pick your ROM (English or Italian Emerald) and press <b>Download the emulator script</b>:
+      <p class="aiuto" style="margin:8px 0 0"><b>Playing inside mGBA?</b> Pick the game version above and press <b>Download the emulator script</b>:
         you get a <code>.lua</code> file already set up with the room above — load it in mGBA
         (<i>Tools → Scripting → Load script</i>) and play, with nothing to edit by hand. It picks its own peer
         number. To change room later: download it again, or type <code>stanza(4242)</code> in the

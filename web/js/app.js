@@ -286,7 +286,11 @@
     });
   }
   async function romDelSito() {
-    var tentativi = [DEF.mbstub || "mbstub.gba", "../hw/mbstub/build/mbstub.gba"];
+    // Lo stub dipende dalla cartuccia (2026-09-24): quello italiano accetta solo
+    // BPEI, quello inglese solo BPEE (con la cartuccia sbagliata resta rosso).
+    var tentativi = romLua() === "usa"
+      ? ["mbstub-usa.gba", "../hw/mbstub/build/mbstub-usa.gba"]
+      : [DEF.mbstub || "mbstub.gba", "../hw/mbstub/build/mbstub.gba"];
     for (var i = 0; i < tentativi.length; i++) {
       try {
         var resp = await fetch(tentativi[i], { cache: "no-store" });
@@ -788,7 +792,11 @@
     try { romSalvata = localStorage.getItem(CHIAVE_ROM); } catch (e) { romSalvata = null; }
     if ($("rom-lua")) {
       $("rom-lua").value = (romSalvata === "it" || romSalvata === "usa") ? romSalvata : (EN ? "usa" : "it");
-      $("rom-lua").onchange = function () { try { localStorage.setItem(CHIAVE_ROM, romLua()); } catch (e) { /* niente */ } };
+      $("rom-lua").onchange = function () {
+        try { localStorage.setItem(CHIAVE_ROM, romLua()); } catch (e) { /* niente */ }
+        romScelta = null;   // cambia la cartuccia: lo stub va ripreso
+        log(L("[mb  ] versione del gioco: ", "[mb  ] game version: ") + (romLua() === "usa" ? "Emerald (USA/EU)" : "Smeraldo (IT)"), "mb");
+      };
     }
     $("mb-file").onchange = async function () {
       var f = $("mb-file").files[0];

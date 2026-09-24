@@ -240,6 +240,9 @@
       <h2>Partita</h2>
       <p class="aiuto">In ordine: collega il Pico, poi <b>slot cartuccia vuoto</b>, cavo, accendi il GBA e carica il gioco;
         schermo rosso ➜ inserisci la cartuccia a caldo ➜ verde ➜ gioca. Infine premi Gioca quando sei all'aperto.</p>
+      <label class="campo" style="margin:4px 0 14px;max-width:420px"><span>Versione del gioco</span>
+        <select id="rom-lua"><option value="it">Pokémon Smeraldo italiano</option><option value="usa">Pokémon Emerald inglese (USA/Europa)</option></select>
+        <small class="guida">Vale per il caricamento nel GBA e per lo script dell'emulatore. <b>Cartuccia inglese su GBA vero: nuova</b>, provata in emulatore ma non ancora sul fisico: se la provi, faccelo sapere su GitHub.</small></label>
       <div class="passi">
         <div id="riga-pico"></div>
         <div id="riga-multiboot"></div>
@@ -252,7 +255,6 @@
       <div class="attrezzi">
         <button class="minore" id="btn-mappa">Mappa live ↗</button>
         <button class="minore" id="btn-spettatore">Guarda soltanto (spettatore)</button>
-        <label class="minore" style="cursor:pointer;padding:0 12px" title="La ROM che usi in mGBA: lo script deve essere della stessa versione">ROM per mGBA: <select id="rom-lua" style="font-size:12px"><option value="it">Smeraldo italiano</option><option value="usa">Emerald inglese (USA/EU)</option></select></label>
         <button class="minore" id="btn-lua" title="Scarica lo script gia' configurato con la stanza qui sopra: si carica in mGBA e basta">Scarica lo script per l'emulatore ↓</button>
         <button class="minore" id="btn-riavvia" disabled>Riavvia il Pico (F-4)</button>
         <button class="minore" id="btn-scollega" disabled>Scollega il Pico</button>
@@ -267,7 +269,7 @@
         al relay e vedi gli altri muoversi, senza mandare niente — e <b>senza occupare uno dei 4 posti</b> della stanza,
         quindi si può guardare anche a partita piena. Se stai giocando altrove (per esempio dentro mGBA), scrivi il
         numero di peer di quel client fra le Impostazioni: sulla mappa ti ritrovi come <b>«tu»</b>, in azzurro.</p>
-      <p class="aiuto" style="margin:8px 0 0"><b>Giochi dentro mGBA?</b> Scegli la tua ROM (Smeraldo italiano o Emerald inglese) e premi <b>Scarica lo script per l'emulatore</b>:
+      <p class="aiuto" style="margin:8px 0 0"><b>Giochi dentro mGBA?</b> Scegli la versione del gioco qui sopra e premi <b>Scarica lo script per l'emulatore</b>:
         ti viene giù un file <code>.lua</code> già scritto con la stanza qui sopra — lo carichi in mGBA
         (<i>Tools → Scripting → Load script</i>) e giochi, senza modificare niente a mano. Il numero di peer se lo
         sorteggia da solo. Per cambiare stanza dopo: riscarica, oppure scrivi <code>stanza(4242)</code> nella

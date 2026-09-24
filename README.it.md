@@ -26,7 +26,7 @@ camminano con l'animazione vera del gioco.
 > multiboot *before* the cartridge boots, hooks the IRQ vector, and draws remote players as
 > native object events driven by the game's own movement actions. Transport: GBA link cable →
 > Raspberry Pi Pico (patched Celio firmware) → USB/WebUSB → UDP/WebSocket relay. Up to 4
-> players, mixed hardware + mGBA emulator + browser. Real GBA: **Italian** cartridge. Emulator: **Italian or English** ROM.
+> players, mixed hardware + mGBA emulator + browser. Italian and English (USA/Europe) Emerald; English cartridge on real GBA not yet hardware-tested.
 > The software was written by **Claude (Anthropic)** in guided sessions, with all hardware
 > testing done by Lain.
 
@@ -78,7 +78,8 @@ camminano con l'animazione vera del gioco.
 ## Cosa ti serve
 
 ### Per giocare su GBA vero
-- un **Game Boy Advance** (o GBA SP) e una cartuccia originale di **Pokémon Smeraldo italiano**;
+- un **Game Boy Advance** (o GBA SP) e una cartuccia originale di **Pokémon Smeraldo**, **italiana** o
+  **inglese (USA/Europa)** *(inglese: nuova, vedi Limiti noti)*;
 - un **Raspberry Pi Pico (RP2040)** con una scheda link (es.
   [game-boy-pico-link-board](https://github.com/agtbaskara/game-boy-pico-link-board)) e un
   **cavo link GBA** a 5 contatti;
@@ -102,7 +103,7 @@ camminano con l'animazione vera del gioco.
 Tutti e tre finiscono **nella stessa stanza**: scegliete un numero fra 1 e 65535 e usatelo tutti.
 
 ### A. GBA vero, dal browser (il modo consigliato)
-1. Apri il sito, premi **«Collega il Pico»** e scegli il dispositivo.
+1. Apri il sito, scegli la **versione del gioco** (italiana o inglese), premi **«Collega il Pico»** e scegli il dispositivo.
 2. Accendi il GBA **senza cartuccia**, col cavo collegato. Premi **«Carica il gioco nel GBA»**:
    lo schermo diventa **rosso** (~15 s, il programma viaggia nel cavo).
 3. Quando il sito lo dice, **inserisci la cartuccia a console accesa**: schermo **giallo**, poi
@@ -119,7 +120,9 @@ net\PANNELLO.bat
 Si apre `http://127.0.0.1:7411`: stessi passi del sito (relay, multiboot, partita, sblocco),
 più i log completi. Di default il pannello **ospita un relay sul tuo PC** (ruolo «ospite»): per
 collegarti al relay pubblico scegli il ruolo **«amico»** nelle impostazioni e come relay
-`wss://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/ws`. Ripiego a riga di comando: `net\1-multiboot.bat` poi `net\2-gioca-internet.bat`.
+`wss://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/ws`. Ripiego a riga di comando: `net\1-multiboot.bat` poi `net\2-gioca-internet.bat`. Il pannello carica lo stub
+italiano: con una **cartuccia inglese** carica `mbstub-usa.gba` (dalle Releases) con
+`python net\mb_multi.py mbstub-usa.gba`, oppure usa il sito.
 
 ### C. Emulatore mGBA
 1. Sul sito scrivi la stanza, scegli la tua ROM (Smeraldo **italiano** o Emerald **inglese**) e premi
@@ -231,6 +234,8 @@ anche una build di [pokeemerald](https://github.com/pret/pokeemerald) (devkitARM
 ```powershell
 .\build.ps1 -Syms it -WithSio          # payload per GBA vero (ROM italiana + driver SIO)
 .\hw\mbstub\build.ps1                  # stub multiboot: ingloba il payload APPENA costruito
+.\build.ps1 -Syms usa -WithSio         # payload per la cartuccia inglese (USA/Europa)...
+.\hw\mbstub\build.ps1 -Syms usa        # ...e il suo stub, mbstub-usa.gba (rifiuta un payload della versione sbagliata)
 .\build.ps1 -LinkRole relay -Syms it -OutName emulatore   # script per mGBA, ROM italiana
 .\build.ps1 -LinkRole relay -Syms usa -OutName emulatore-usa   # script per mGBA, ROM inglese (USA/Europa)
 python tools\gen_mappa.py              # dati della Mappa live (dalla decomp + nomi IT dalla ROM)
@@ -283,11 +288,12 @@ Massimo 4 giocatori per stanza (il quinto viene rifiutato); gli spettatori non c
 
 ## Limiti noti
 
-- **GBA vero: solo cartuccia italiana**, per ora: lo stub multiboot accetta solo il gioco italiano
-  (con una cartuccia inglese resta sullo schermo rosso). In **emulatore** funzionano sia la ROM italiana
-  sia quella inglese (USA/Europa), e giocano insieme (provato sul relay pubblico il 2026-09-24).
-  Lo stub per la cartuccia inglese è il prossimo passo: gli indirizzi si conoscono (la decomp *è* la ROM
-  inglese), ma nessuno di noi ha ancora una cartuccia inglese per provarlo sul fisico.
+- **Cartuccia inglese su GBA vero: nuova, non ancora provata sul fisico.** `mbstub-usa.gba` differisce dallo
+  stub italiano (provato sul fisico) solo in cinque costanti (codice del gioco + quattro firme della ROM, tutte
+  misurate sulla ROM inglese); il codice di avvio è identico byte per byte. In emulatore il payload inglese
+  passa il banco di handoff completo, e partite italiane e inglesi si vedono sul relay pubblico. Manca una
+  prova su un GBA vero con cartuccia inglese: se ne hai una, segnalacelo negli Issues. Uno stub sbagliato non
+  avvia mai il gioco a metà: resta rosso (codice del gioco sbagliato) o diventa blu (corpo della ROM diverso).
   Rosso Fuoco/Verde Foglia sono il prossimo passo naturale (anche `pokefirered` è decompilato).
 - **16 object event per mappa**: su una mappa affollata ci stanno 2-3 amici. Il quarto amico in su
   non ha avatar ma resta sulla Mappa live.

@@ -21,9 +21,9 @@ around it with the game's real animation.
 |---|---|---|
 | ![together](docs/img/foto-p3-73.png) | ![club](docs/img/2026-08-27-club-due-emulatori-saletta.png) | ![trade](docs/img/2026-08-27-SCAMBIO-FATTO-p1.png) |
 
-> ⚠️ **Which versions work:** on a **real GBA**, the **Italian** Pokémon Emerald cartridge only, for now.
-> In the **emulator (mGBA)**, both the **Italian** and the **English (USA/Europe)** ROM — and they play
-> together. The in-game screenshots are in Italian because that's what we play. Most of the source code comments are in Italian too.
+> ⚠️ **Which versions work:** Pokémon Emerald **Italian** and **English (USA/Europe)**, and they play together.
+> In the **emulator** both are tested. On a **real GBA** the Italian cartridge is tested; the **English cartridge
+> is new**: tested in the emulator but not yet on real hardware (see Known limitations). The in-game screenshots are in Italian because that's what we play. Most of the source code comments are in Italian too.
 >
 > ⚠️ **Use at your own risk.** The program never writes your save file, but it runs code inside the game on
 > your original cartridge, and it comes with **no warranty** (GPL-3.0). If you can, **back up your save first**
@@ -73,7 +73,8 @@ around it with the game's real animation.
 ## What you need
 
 ### To play on a real GBA
-- a **Game Boy Advance** (or GBA SP) and an original **Italian Pokémon Emerald** cartridge;
+- a **Game Boy Advance** (or GBA SP) and an original **Pokémon Emerald** cartridge, **Italian** or
+  **English (USA/Europe)** *(English: new, see Known limitations)*;
 - a **Raspberry Pi Pico (RP2040)** with a link board (e.g.
   [game-boy-pico-link-board](https://github.com/agtbaskara/game-boy-pico-link-board)) and a
   5-pin **GBA link cable**;
@@ -99,7 +100,8 @@ around it with the game's real animation.
 All three end up **in the same room**: pick a number between 1 and 65535 and everybody uses it.
 
 ### A. Real GBA, from the browser (recommended)
-1. Open the website, press **«Connect the Pico»** and pick the device.
+1. Open the website, choose your **game version** (English or Italian), press **«Connect the Pico»**
+   and pick the device.
 2. Switch on the GBA **with no cartridge**, cable plugged in. Press **«Load the game into the GBA»**:
    the screen turns **red** (~15 s, the program travels through the cable).
 3. When the site tells you, **insert the cartridge with the console on**: **yellow** screen, then
@@ -116,7 +118,9 @@ net\PANNELLO.bat
 It opens `http://127.0.0.1:7411` (Italian UI): same steps as the website (relay, multiboot, game,
 unlock), plus the full logs. By default the panel **hosts a relay on your own PC** (role «ospite»):
 to join the public relay instead, in the settings choose role **«amico»** and set the relay to
-`wss://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/ws`. Command-line fallback: `net\1-multiboot.bat` then `net\2-gioca-internet.bat`.
+`wss://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/ws`. Command-line fallback: `net\1-multiboot.bat` then `net\2-gioca-internet.bat`. The panel loads the Italian
+stub: for an **English cartridge** load `mbstub-usa.gba` (from the Releases) with
+`python net\mb_multi.py mbstub-usa.gba`, or use the website.
 
 ### C. mGBA emulator
 1. On the website, type the room, pick your ROM (**English** or **Italian** Emerald) and press
@@ -228,6 +232,8 @@ need a build of [pokeemerald](https://github.com/pret/pokeemerald) (devkitARM, i
 ```powershell
 .\build.ps1 -Syms it -WithSio          # payload for real GBA (Italian ROM + SIO driver)
 .\hw\mbstub\build.ps1                  # multiboot stub: embeds the payload JUST built
+.\build.ps1 -Syms usa -WithSio         # payload for an English (USA/Europe) cartridge...
+.\hw\mbstub\build.ps1 -Syms usa        # ...and its stub, mbstub-usa.gba (refuses a payload of the wrong version)
 .\build.ps1 -LinkRole relay -Syms it -OutName emulatore   # mGBA script, Italian ROM
 .\build.ps1 -LinkRole relay -Syms usa -OutName emulatore-usa   # mGBA script, English (USA/Europe) ROM
 python tools\gen_mappa.py              # Live map data (from the decomp + Italian names from the ROM)
@@ -281,11 +287,13 @@ At most 4 players per room (the fifth is refused); spectators don't count.
 
 ## Known limitations
 
-- **Real GBA: Italian cartridge only**, for now: the multiboot stub only accepts the Italian game
-  (with an English cartridge it just stays on the red screen). In the **emulator**, the Italian and the
-  English (USA/Europe) ROM both work and play together (tested on the public relay, 2026-09-24).
-  An English-cartridge stub is the next step: the addresses are known (the decomp *is* the English ROM),
-  but nobody on the team has an English cartridge to test it on hardware yet.
+- **English cartridge on a real GBA: new, not yet tested on hardware.** `mbstub-usa.gba` differs from the
+  hardware-proven Italian stub only in five constants (game code + four ROM signature words, all measured on
+  the English ROM); the boot code is byte-identical. In the emulator the English payload passes the full
+  handoff test (game restarted through the stub's own re-entry code, hook installed, payload running), and
+  Italian and English games see each other on the public relay. What's missing is one run on a real GBA with
+  an English cartridge: if you have one, please report on GitHub Issues. A wrong stub never boots the game
+  half-way: it stays red (wrong game code) or turns blue (wrong ROM body).
   FireRed/LeafGreen are the natural next step (`pokefirered` is decompiled too).
 - **16 object events per map**: a crowded map fits 2-3 friends. From the fourth friend on
   there's no avatar, but they stay on the Live map.

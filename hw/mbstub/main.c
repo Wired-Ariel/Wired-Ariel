@@ -30,7 +30,13 @@
  * storto.
  */
 
+/* La versione del gioco si sceglie in build (hw/mbstub/build.ps1 -Syms usa):
+ * il blocco di boot e' lo stesso, cambiano gamecode e firme del corpo. */
+#if defined(MBSTUB_SYMS_USA)
+#include "boot_syms_usa.h"
+#else
 #include "boot_syms_it.h"
+#endif
 
 typedef unsigned char  u8;
 typedef unsigned short u16;
@@ -85,7 +91,7 @@ static void waitFrame(void)
  */
 static int cartIsOurs(void)
 {
-    if (*(volatile u32 *)ADDR_GAMECODE      != GAMECODE_BPEI)          return 0;
+    if (*(volatile u32 *)ADDR_GAMECODE      != GAMECODE_EXPECTED)      return 0;
     if (*(volatile u32 *)ADDR_POOL_INTRMAIN != ADDR_INTR_MAIN)         return 0;
     if (*(volatile u32 *)ADDR_POOL_INTRBUF  != ADDR_INTR_MAIN_BUFFER)  return 0;
     return 1;
