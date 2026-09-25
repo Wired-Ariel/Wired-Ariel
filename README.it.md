@@ -8,7 +8,7 @@ Nessuna ROM modificata, nessun salvataggio toccato, nessun trucco da fare in par
 colleghi il cavo, accendi, giochi — e gli altri giocatori compaiono nella tua mappa e ci
 camminano con l'animazione vera del gioco.
 
-🌐 **Prova subito dal browser:** https://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/
+🌐 **Prova subito dal browser:** https://gbcatrade.wired-ariel.it/
 📦 **Binari pronti (firmware, stub multiboot, script per mGBA):** pagina *Releases* di questo repository
 
 | Giocatore 1 | Giocatore 2 | Giocatore 3 |
@@ -120,7 +120,7 @@ net\PANNELLO.bat
 Si apre `http://127.0.0.1:7411`: stessi passi del sito (relay, multiboot, partita, sblocco),
 più i log completi. Di default il pannello **ospita un relay sul tuo PC** (ruolo «ospite»): per
 collegarti al relay pubblico scegli il ruolo **«amico»** nelle impostazioni e come relay
-`wss://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/ws`. Ripiego a riga di comando: `net\1-multiboot.bat` poi `net\2-gioca-internet.bat`. Il pannello carica lo stub
+`wss://gbcatrade.wired-ariel.it/ws`. Ripiego a riga di comando: `net\1-multiboot.bat` poi `net\2-gioca-internet.bat`. Il pannello carica lo stub
 italiano: con una **cartuccia inglese** carica `mbstub-usa.gba` (dalle Releases) con
 `python net\mb_multi.py mbstub-usa.gba`, oppure usa il sito.
 
@@ -279,7 +279,7 @@ gioco (`sRegIE`) non venga mai ridotta in `REG_IE` - la causa della musica rotta
 
 Il relay è Python puro (`net/relay.py`, UDP) più un frontale WebSocket (`net/relay_ws.py`) per i
 browser. Guida completa per una VPS con nginx/Caddy e HTTPS: [`net/RELAY-VPS.it.md`](net/RELAY-VPS.it.md);
-blocco nginx pronto: [`net/nginx-passotile.conf`](net/nginx-passotile.conf).
+blocco nginx pronto: [`net/nginx-gen3pm.conf`](net/nginx-gen3pm.conf).
 
 ```bash
 python net/relay.py --port 9000

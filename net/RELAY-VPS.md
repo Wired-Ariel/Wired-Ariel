@@ -77,7 +77,7 @@ a DNS name pointing to the VPS IP (a free subdomain is fine).
 ```bash
 sudo cp relay_ws.py /opt/gba-relay/          # next to relay.py and protocol.py
 sudo apt-get install -y caddy                # https://caddyserver.com/docs/install
-sudo mkdir -p /var/www/passotile             # put the content of build/sito-web here (prepara-sito-web.ps1)
+sudo mkdir -p /var/www/gen3-poke-multiplayer             # put the content of build/sito-web here (prepara-sito-web.ps1)
 ```
 
 `/etc/systemd/system/gba-relay-ws.service`:
@@ -102,7 +102,7 @@ WantedBy=multi-user.target
 
 ```
 relay.example.com {
-    root * /var/www/passotile
+    root * /var/www/gen3-poke-multiplayer
     file_server
     reverse_proxy /ws 127.0.0.1:9001
 }
@@ -121,7 +121,7 @@ Caddy (https). UDP 9000 stays open for people playing from mGBA/GBA with
 `client.py`: they share the same rooms as the browsers.
 
 **With nginx instead of Caddy** (this is what the project's public relay uses): include
-[`nginx-passotile.conf`](nginx-passotile.conf) in a vhost that already has a certificate. It also
+[`nginx-gen3pm.conf`](nginx-gen3pm.conf) in a vhost that already has a certificate. It also
 limits each IP to 8 relay connections (`limit_conn`), so nobody can clog the relay for everyone else.
 
 **The mGBA script has no TLS**: it speaks plain `ws://`. If emulator players use your relay, expose the
@@ -134,6 +134,6 @@ must pass all its tests.
 ## What this recipe does NOT do
 
 - No authentication: the relay sees 12 opaque bytes per event, no personal data, and the room is
-  the only protection. For a public relay, add a per-IP limit (as in `nginx-passotile.conf`):
+  the only protection. For a public relay, add a per-IP limit (as in `nginx-gen3pm.conf`):
   `relay.py` itself has none.
 - No IPv6, no dynamic DNS: a VPS has a fixed IP, and that's its strength.

@@ -8,7 +8,7 @@ No modified ROM, no save file touched, no in-game tricks:
 plug in the cable, switch on, play — and the other players show up on your map and walk
 around it with the game's real animation.
 
-🌐 **Try it now from your browser:** https://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/
+🌐 **Try it now from your browser:** https://gbcatrade.wired-ariel.it/
 📦 **Ready-made binaries (firmware, multiboot stub, mGBA script):** this repository's *Releases* page
 
 | Player 1 | Player 2 | Player 3 |
@@ -118,7 +118,7 @@ net\PANNELLO.bat
 It opens `http://127.0.0.1:7411` (Italian UI): same steps as the website (relay, multiboot, game,
 unlock), plus the full logs. By default the panel **hosts a relay on your own PC** (role «ospite»):
 to join the public relay instead, in the settings choose role **«amico»** and set the relay to
-`wss://gbcatrade.wired-ariel.it/gen3-poke-multiplayer/ws`. Command-line fallback: `net\1-multiboot.bat` then `net\2-gioca-internet.bat`. The panel loads the Italian
+`wss://gbcatrade.wired-ariel.it/ws`. Command-line fallback: `net\1-multiboot.bat` then `net\2-gioca-internet.bat`. The panel loads the Italian
 stub: for an **English cartridge** load `mbstub-usa.gba` (from the Releases) with
 `python net\mb_multi.py mbstub-usa.gba`, or use the website.
 
@@ -278,7 +278,7 @@ Parameters and criteria are in the file header.
 
 The relay is pure Python (`net/relay.py`, UDP) plus a WebSocket front end (`net/relay_ws.py`) for
 browsers. Full guide for a VPS with nginx/Caddy and HTTPS: [`net/RELAY-VPS.md`](net/RELAY-VPS.md);
-ready-made nginx block: [`net/nginx-passotile.conf`](net/nginx-passotile.conf).
+ready-made nginx block: [`net/nginx-gen3pm.conf`](net/nginx-gen3pm.conf).
 
 ```bash
 python net/relay.py --port 9000

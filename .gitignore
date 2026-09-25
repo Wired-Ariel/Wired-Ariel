@@ -27,6 +27,7 @@ net/log/
 *.elf
 
 # --- config locali ---
+gen3-poke-multiplayer-config.lua
 passotile-config.lua
 net/pannello.config.json
 net/pannello.config.json.local

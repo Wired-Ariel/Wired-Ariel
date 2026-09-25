@@ -11,7 +11,7 @@ ascolta su 0.0.0.0 - ma il pacchetto non arriva mai al processo, e nel log
 del relay non e' MAI comparso un peer che non fosse 127.0.0.1. Il filtro sta
 a monte, nella Security List della VCN Oracle, che si apre solo dalla console
 cloud. Ecco perche' finora via internet ha funzionato SOLO il browser: quello
-passa dalla 443 (`wss://.../passotile/ws` -> relay_ws.py -> relay.py in
+passa dalla 443 (`wss://.../ws` -> relay_ws.py -> relay.py in
 locale). Le partite con i client Python erano sempre state fatte col relay
 sul PC di casa, con il port forwarding sul router.
 

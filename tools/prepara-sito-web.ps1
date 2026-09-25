@@ -89,7 +89,7 @@ Copy-Item $mbstub (Join-Path $Out "mbstub.gba")
 # dall'utente, convertendo wss:// in ws://.
 $relayLua = $Relay -replace '^wss://', 'ws://'
 if ($relayLua -notmatch '^ws://') { $relayLua = "ws://" + ($relayLua -replace '^https?://', '') }
-$luaOut = Join-Path $Out "passotile-emulatore.lua"
+$luaOut = Join-Path $Out "gen3-poke-multiplayer-emulatore.lua"
 & (Join-Path $root "build.ps1") -LinkRole relay -RelayUrl $relayLua -RelayRoom $Stanza `
     -RelayPeer 0 -Syms it -OutName emulatore | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "build del template per l'emulatore fallita" }
@@ -101,7 +101,7 @@ Copy-Item $luaSorgente $luaOut
 & (Join-Path $root "build.ps1") -LinkRole relay -RelayUrl $relayLua -RelayRoom $Stanza `
     -RelayPeer 0 -Syms usa -OutName emulatore-usa | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "build del template per la ROM inglese fallita" }
-Copy-Item (Join-Path $root "mgba\inject.emulatore-usa.lua") (Join-Path $Out "passotile-emulatore-usa.lua")
+Copy-Item (Join-Path $root "mgba\inject.emulatore-usa.lua") (Join-Path $Out "gen3-poke-multiplayer-emulatore-usa.lua")
 # La guardia che conta: le tre righe che il sito riscrivera' devono esserci.
 # Se build.ps1 cambiasse formato, meglio fermarsi qui che pubblicare un sito
 # il cui bottone fallisce in faccia all'utente.
@@ -150,7 +150,7 @@ Write-Output ("mappa     : {0} file, {1:N1} MB" -f $nMappa.Count, ($nMappa.Sum /
 
 # --- config.js: i default che la pagina propone ------------------------------
 $cfg = "// generato da tools\prepara-sito-web.ps1 - non modificare a mano`n" +
-       "window.PASSOTILE_DEFAULTS = { relay: " + (ConvertTo-Json $Relay) + ", stanza: " + $Stanza + ", mbstub: `"mbstub.gba`" };`n"
+       "window.GEN3PM_DEFAULTS = { relay: " + (ConvertTo-Json $Relay) + ", stanza: " + $Stanza + ", mbstub: `"mbstub.gba`" };`n"
 [System.IO.File]::WriteAllText((Join-Path $Out "config.js"), $cfg, (New-Object System.Text.UTF8Encoding($false)))
 
 $n = (Get-ChildItem -Recurse -File $Out | Measure-Object -Property Length -Sum)

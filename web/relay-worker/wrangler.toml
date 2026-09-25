@@ -2,8 +2,8 @@
 #
 # Uso (una volta: `npm i -g wrangler`, poi `wrangler login`):
 #   wrangler dev            # prova in locale: ws://127.0.0.1:8787/ws?stanza=1
-#   wrangler deploy         # pubblica: wss://passotile-relay.<account>.workers.dev/ws?stanza=N
-name = "passotile-relay"
+#   wrangler deploy         # pubblica: wss://gen3pm-relay.<account>.workers.dev/ws?stanza=N
+name = "gen3pm-relay"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 

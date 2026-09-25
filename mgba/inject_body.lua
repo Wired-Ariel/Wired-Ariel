@@ -6,7 +6,7 @@
 -- palmare (TrimUI Brick con Knulli, l'ambiente in cui gira davvero il ruolo
 -- "relay") la finestra di scripting NON c'e', e senza un file resta solo
 -- "non funziona". Quindi ogni riga che finisce nella console finisce anche in
--- `passotile.log`, accanto allo script.
+-- `gen3-poke-multiplayer.log`, accanto allo script.
 --
 -- Due scelte che vanno tenute come sono:
 --   * la console NON viene mai filtrata. Il rapporto periodico e i suoi
@@ -14,7 +14,7 @@
 --     resta a zero e' un difetto da indagare"): silenziarli per fare un file
 --     piu' pulito significherebbe spegnere lo strumento.
 --   * nel FILE, invece, il rapporto periodico si scrive solo con
---     PASSOTILE_DEBUG = true, e comunque uno ogni cinque. Un rapporto al
+--     GEN3PM_DEBUG = true, e comunque uno ogni cinque. Un rapporto al
 --     secondo per un'ora sono decine di MB sulla microSD. Avvisi ed errori
 --     passano sempre, DEBUG o no.
 -- =============================================================================
@@ -28,7 +28,7 @@ do local function installa()   -- UNA FUNZIONE, non un semplice `do`:
 -- qui e' al tetto dei 200 di Lua (oltre, mGBA non da' un errore: da'
 -- silenzio). Quelli di una funzione no. Verificato il 2026-08-27.
     local OGNI          = 5      -- un rapporto completo su cinque
-    local DEBUG_ATTIVO  = rawget(_G, "PASSOTILE_DEBUG") == true
+    local DEBUG_ATTIVO  = rawget(_G, "GEN3PM_DEBUG") == true
     local consoleVera   = console
     local file, percorso
     local numero, dentroRapporto, tengoRapporto = 0, false, false
@@ -38,10 +38,10 @@ do local function installa()   -- UNA FUNZIONE, non un semplice `do`:
         local dir = script.dir or script.path
         if type(dir) == "string" and dir ~= "" then
             -- Alcune build espongono la cartella, altre il percorso del .lua.
-            percorsi[#percorsi + 1] = dir:gsub("[\\/][^\\/]*%.lua$", "") .. "/passotile.log"
+            percorsi[#percorsi + 1] = dir:gsub("[\\/][^\\/]*%.lua$", "") .. "/gen3-poke-multiplayer.log"
         end
     end
-    percorsi[#percorsi + 1] = "passotile.log"
+    percorsi[#percorsi + 1] = "gen3-poke-multiplayer.log"
 
     if type(io) == "table" and type(io.open) == "function" then
         for _, p in ipairs(percorsi) do
@@ -151,10 +151,10 @@ do local function installa()   -- UNA FUNZIONE, non un semplice `do`:
             end
             file:write("\239\187\191")   -- BOM UTF-8, per gli editor Windows
             file:write("===============================================\n")
-            file:write(" PASSOTILE - SESSIONE " .. quando .. "\n")
+            file:write(" GEN3-POKE-MULTIPLAYER - SESSIONE " .. quando .. "\n")
             file:write(" Log   : " .. percorso .. "\n")
             file:write(string.format(" Debug : %s (un rapporto ogni %d nel file)\n",
-                DEBUG_ATTIVO and "ATTIVO" or "spento - PASSOTILE_DEBUG = true per accenderlo",
+                DEBUG_ATTIVO and "ATTIVO" or "spento - GEN3PM_DEBUG = true per accenderlo",
                 OGNI))
             file:write("===============================================\n\n")
             file:flush()
@@ -994,31 +994,38 @@ end
 -- quest'ordine:
 --
 --   1. i comandi dalla console di mGBA:  stanza(4242)  peer(7)  relay("ws://...")
---   2. il file passotile-config.lua accanto allo script
+--   2. il file gen3-poke-multiplayer-config.lua accanto allo script
+--      (o, se manca, il vecchio passotile-config.lua: chi l'aveva gia' non perde la stanza)
 --   3. i valori scritti nello script (quelli del sito)
 --
 -- Chi decide cosa e' scritto nel log all'avvio: una configurazione che non si
 -- vede e' una configurazione che non si puo' correggere.
 
-local CONFIG_FILE = "passotile-config.lua"
+local CONFIG_FILE = "gen3-poke-multiplayer-config.lua"
+-- Il nome di prima del cambio di nome del progetto (2026-09-25): si LEGGE ancora,
+-- cosi' chi aveva gia' salvato stanza e peer non li perde; si scrive solo il nuovo.
+local CONFIG_FILE_VECCHIO = "passotile-config.lua"
 local cfgOrigine = "script"    -- da dove vengono i valori attuali
 
 -- Il file di config sta accanto allo script se l'API dice dove siamo, altrimenti
 -- nella cartella corrente di mGBA. Si prova l'una e l'altra: costa due open.
-local function cfgPercorsi()
+local function cfgPercorsi(nome)
+    nome = nome or CONFIG_FILE
     local out = {}
     local dir = nil
     if type(script) == "table" then dir = script.dir or script.path end
     if type(dir) == "string" and dir ~= "" then
         dir = dir:gsub("[\\/][^\\/]*%.lua$", "")
-        out[#out + 1] = dir .. "/" .. CONFIG_FILE
+        out[#out + 1] = dir .. "/" .. nome
     end
-    out[#out + 1] = CONFIG_FILE
+    out[#out + 1] = nome
     return out
 end
 
 local function cfgLeggi()
-    for _, path in ipairs(cfgPercorsi()) do
+    local tutti = cfgPercorsi(CONFIG_FILE)
+    for _, p in ipairs(cfgPercorsi(CONFIG_FILE_VECCHIO)) do tutti[#tutti + 1] = p end
+    for _, path in ipairs(tutti) do
         local f = io.open(path, "r")
         if f then
             local testo = f:read("*a")
@@ -1462,7 +1469,7 @@ do local function installa()   -- UNA FUNZIONE, non un semplice `do`:
         -- 1 = fondo, 2 = bordo, 3 = testo, 4 = riga selezionata.
         uiRect(0, 0, 128, 64, 2)
         uiRect(2, 2, 124, 60, 1)
-        uiText(16, 3, "PASSOTILE CONFIG", 3)
+        uiText(25, 3, "GEN3PM CONFIG", 3)
         uiText(8, 14, "ROOM:" .. tostring(configUi.room),
                configUi.field == 1 and 4 or 3)
         uiText(8, 24, "PEER:" .. tostring(configUi.peer),

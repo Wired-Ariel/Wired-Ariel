@@ -271,7 +271,7 @@ class Pannello:
                 return False, ("indirizzo del relay non valido: serve "
                                "'host:porta' (per esempio 93.42.10.20:9000) "
                                "oppure un indirizzo WebSocket "
-                               "(wss://gbcatrade.wired-ariel.it/passotile/ws)")
+                               "(wss://gbcatrade.wired-ariel.it/ws)")
             host, _, porta = relay.partition(":")
             if not (0 < int(porta) < 65536):
                 return False, "porta del relay fuori range"
@@ -586,7 +586,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             # ?scarica=1: il browser salva un file invece di mostrare la pagina.
             if "scarica=1" in (self.path.split("?", 1) + [""])[1]:
-                nome = "passotile-%s.log" % time.strftime("%Y%m%d-%H%M%S")
+                nome = "gen3-poke-multiplayer-%s.log" % time.strftime("%Y%m%d-%H%M%S")
                 self.send_header("Content-Disposition",
                                  'attachment; filename="%s"' % nome)
             self.end_headers()

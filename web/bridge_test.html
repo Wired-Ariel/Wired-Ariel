@@ -182,9 +182,9 @@
       if (/^ws:\/\//i.test(url)) return { url: url, degradato: false };
       return { url: "ws://" + url.replace(/^https?:\/\//i, ""), degradato: false };
     }
-    var a = relayPerLua("wss://gbcatrade.wired-ariel.it/passotile/ws");
+    var a = relayPerLua("wss://gbcatrade.wired-ariel.it/ws");
     var b = relayPerLua("ws://127.0.0.1:9001/");
-    return (a.url === "ws://gbcatrade.wired-ariel.it/passotile/ws" && a.degradato === true &&
+    return (a.url === "ws://gbcatrade.wired-ariel.it/ws" && a.degradato === true &&
             b.url === "ws://127.0.0.1:9001/" && b.degradato === false) || [a, b];
   });
 

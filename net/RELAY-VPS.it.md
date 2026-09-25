@@ -78,7 +78,7 @@ un nome DNS che punti all'IP del VPS (un sottodominio gratuito va bene).
 ```bash
 sudo cp relay_ws.py /opt/gba-relay/          # accanto a relay.py e protocol.py
 sudo apt-get install -y caddy                # https://caddyserver.com/docs/install
-sudo mkdir -p /var/www/passotile             # qui il contenuto di build/sito-web (prepara-sito-web.ps1)
+sudo mkdir -p /var/www/gen3-poke-multiplayer             # qui il contenuto di build/sito-web (prepara-sito-web.ps1)
 ```
 
 `/etc/systemd/system/gba-relay-ws.service`:
@@ -102,8 +102,8 @@ WantedBy=multi-user.target
 `/etc/caddy/Caddyfile` (sostituire il nome):
 
 ```
-passotile.esempio.it {
-    root * /var/www/passotile
+gen3pm.esempio.it {
+    root * /var/www/gen3-poke-multiplayer
     file_server
     reverse_proxy /ws 127.0.0.1:9001
 }
@@ -113,17 +113,17 @@ passotile.esempio.it {
 sudo systemctl daemon-reload
 sudo systemctl enable --now gba-relay-ws
 sudo systemctl reload caddy
-curl https://passotile.esempio.it/ws          # {"relay_ws": true, ...}: il frontale risponde dietro Caddy
+curl https://gen3pm.esempio.it/ws          # {"relay_ws": true, ...}: il frontale risponde dietro Caddy
 ```
 
-Nel pannello web: relay `wss://passotile.esempio.it/ws`, stessa stanza per
+Nel pannello web: relay `wss://gen3pm.esempio.it/ws`, stessa stanza per
 tutti. `relay_ws.py --bind 127.0.0.1` apposta: dall'esterno si entra SOLO da
 Caddy (https). La 9000 UDP resta aperta per chi gioca da mGBA/GBA con
 `client.py`: stanno nelle stesse stanze dei browser.
 
 Non eseguito su un VPS vero (2026-08-23): provato in locale (`net/test_relay_ws.py`
 e la pagina contro `ws://127.0.0.1:9001`). La prima volta: `curl` qui sopra,
-poi `bridge_test.html?relay=wss://passotile.esempio.it/ws` deve dare 32 ok.
+poi `bridge_test.html?relay=wss://gen3pm.esempio.it/ws` deve dare 32 ok.
 
 ## Cosa NON fa questa ricetta
 

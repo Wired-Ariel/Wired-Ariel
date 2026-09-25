@@ -839,7 +839,7 @@
     }
   };
   var lang = "it";
-  try { lang = localStorage.getItem("passotile-lang") || "it"; } catch (e) { lang = "it"; }
+  try { lang = localStorage.getItem("gen3pm-lang") || localStorage.getItem("passotile-lang") || "it"; } catch (e) { lang = "it"; }
   function t(k, a) {
     var s = (UI[lang] && UI[lang][k]) || UI.it[k] || k;
     return a === undefined ? s : s.replace("%s", a);
@@ -939,8 +939,8 @@
     dirty = true;
   }
 
-  $("lang-it").onclick = function () { lang = "it"; try { localStorage.setItem("passotile-lang", lang); } catch (e) {} applicaLingua(); };
-  $("lang-en").onclick = function () { lang = "en"; try { localStorage.setItem("passotile-lang", lang); } catch (e) {} applicaLingua(); };
+  $("lang-it").onclick = function () { lang = "it"; try { localStorage.setItem("gen3pm-lang", lang); } catch (e) {} applicaLingua(); };
+  $("lang-en").onclick = function () { lang = "en"; try { localStorage.setItem("gen3pm-lang", lang); } catch (e) {} applicaLingua(); };
 
   // ---------------------------------------------------------------- dati
   function carica() {
@@ -960,7 +960,7 @@
       applicaLingua();
       // il seme di Feebas dell'ultima volta, se c'era: si riapplica da solo
       try {
-        var fs = localStorage.getItem("passotile-feebas-seme");
+        var fs = localStorage.getItem("gen3pm-feebas-seme") || localStorage.getItem("passotile-feebas-seme");
         if (fs !== null) {
           Object.keys(d.mappe).forEach(function (k) {
             if (d.mappe[k].feebas && d.mappe[k].feebas.length) applicaFeebasSeme(k, parseInt(fs, 10));
@@ -2575,7 +2575,7 @@
     feebas6[key] = spot.filter(function (n) { return FEEBAS_IRRAGGIUNGIBILI.indexOf(n) < 0; })
                        .map(function (n) { return m.feebas[n - 4]; })
                        .filter(function (v) { return !!v; });
-    try { localStorage.setItem("passotile-feebas-seme", String(feebasSeme)); } catch (e) {}
+    try { localStorage.setItem("gen3pm-feebas-seme", String(feebasSeme)); } catch (e) {}
     dirty = true;
     return feebas6[key];
   }
@@ -3045,7 +3045,7 @@
   // Il pannello web, se e' aperto in un'altra scheda dello stesso sito.
   var daWeb = null, daWebT = 0, canalePos = null;
   try {
-    canalePos = new BroadcastChannel("passotile-posizioni");
+    canalePos = new BroadcastChannel("gen3pm-posizioni");
     canalePos.onmessage = function (ev) {
       if (!ev.data || ev.data.chiedo) return;
       daWeb = ev.data; daWebT = Date.now();

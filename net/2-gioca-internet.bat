@@ -24,5 +24,5 @@ if "%STANZA%"=="" set /p STANZA=Numero della stanza (lo stesso degli amici):
 set PEER=%1
 if "%PEER%"=="" set /p PEER=Peer-id (1..4, DIVERSO per ogni giocatore, INVIO per 1):
 if "%PEER%"=="" set PEER=1
-python client.py --transport usb --room %STANZA% --peer-id %PEER% --usb-timing 7400 --relay wss://gbcatrade.wired-ariel.it/passotile/ws
+python client.py --transport usb --room %STANZA% --peer-id %PEER% --usb-timing 7400 --relay wss://gbcatrade.wired-ariel.it/ws
 pause

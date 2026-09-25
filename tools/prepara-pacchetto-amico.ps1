@@ -53,7 +53,7 @@ $ErrorActionPreference = "Stop"
 #                            VCN (misurato: timeout, non rifiuto), e in
 #                            generale l'unica che passa da qualunque rete.
 if ($Relay -notmatch "^[A-Za-z0-9\.\-]+:\d+$" -and $Relay -notmatch "^wss?://") {
-    throw "-Relay deve essere 'host:porta' (es. 93.42.10.20:9000) oppure un URL WebSocket (es. wss://gbcatrade.wired-ariel.it/passotile/ws), non '$Relay'"
+    throw "-Relay deve essere 'host:porta' (es. 93.42.10.20:9000) oppure un URL WebSocket (es. wss://gbcatrade.wired-ariel.it/ws), non '$Relay'"
 }
 if ($Stanza -lt 41000) {
     Write-Warning ("Stanza {0}: meglio un numero alto e non ovvio (41000-65000), e' l'unica difesa del relay." -f $Stanza)

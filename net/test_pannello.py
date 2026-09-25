@@ -77,7 +77,7 @@ class TestValidazione(unittest.TestCase):
         la VPS, e chi la usa NON ospita niente - il ruolo deve tornare
         'amico' da solo, o il pannello offrirebbe di accendere un relay
         locale che nessuno userebbe."""
-        url = "wss://gbcatrade.wired-ariel.it/passotile/ws"
+        url = "wss://gbcatrade.wired-ariel.it/ws"
         ok, _ = self.p.aggiorna_config({"relay": url, "ruolo": "ospite"})
         self.assertTrue(ok, "rifiutato un relay WebSocket valido")
         self.assertEqual(self.p.config["relay"], url)
@@ -86,7 +86,7 @@ class TestValidazione(unittest.TestCase):
         self.assertTrue(self.p.aggiorna_config({"relay": "ws://127.0.0.1:9001/"})[0])
         # ma non un URL storpio
         for cattivo in ("wss://", "ws:/host/ws", "wss://host con spazio/ws",
-                        "http://gbcatrade.wired-ariel.it/passotile/ws"):
+                        "http://gbcatrade.wired-ariel.it/ws"):
             ok, _ = self.p.aggiorna_config({"relay": cattivo})
             self.assertFalse(ok, "accettato un URL non valido: %r" % cattivo)
 

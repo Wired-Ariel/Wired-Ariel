@@ -7,12 +7,12 @@
  *   2. se la pagina aperta non e' nella lingua scelta, passa all'altra
  *      SUBITO, prima di disegnare niente;
  *   3. mette il bottone IT | EN nel segnaposto #lingua-slot della pagina.
- * La chiave "passotile-lang" e' la stessa della Mappa live: la scelta vale
+ * La chiave "gen3pm-lang" e' la stessa della Mappa live: la scelta vale
  * anche li'.
  */
 (function () {
   "use strict";
-  var K = "passotile-lang";
+  var K = "gen3pm-lang";
   var pagina = location.pathname.split("/").pop() || "index.html";
   var en = /-en\.html$/.test(pagina);
   var base = en ? pagina.replace(/-en\.html$/, ".html") : pagina;
@@ -20,7 +20,8 @@
   var mia = en ? "en" : "it";
 
   var pref = null;
-  try { pref = localStorage.getItem(K); } catch (e) { pref = null; }
+  // "passotile-lang": il nome di prima (2026-09-25), letto come ripiego.
+  try { pref = localStorage.getItem(K) || localStorage.getItem("passotile-lang"); } catch (e) { pref = null; }
   if (pref !== "it" && pref !== "en") {
     pref = /^it\b/i.test(navigator.language || "") ? "it" : "en";
     try { localStorage.setItem(K, pref); } catch (e) { /* niente */ }

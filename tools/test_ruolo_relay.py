@@ -17,7 +17,7 @@ interprete Lua che tools/check_lua.py usa gia' per compilare lo script:
   - owlSend         : l'intestazione OWL1, byte per byte, contro protocol.py
   - il timbro dello SLOT nel nibble alto del type (fino a 4 giocatori)
   - relaySlotFor    : assegnazione 0,1,2 e il quarto amico senza avatar
-  - la lettura di passotile-config.lua (stanza/peer senza toccare lo script)
+  - la lettura di gen3-poke-multiplayer-config.lua (stanza/peer senza toccare lo script)
 
 Non prova la rete: quella e' la procedura in mGBA. Prova la LOGICA, che e'
 esattamente cio' che si rompe in silenzio.
@@ -90,8 +90,8 @@ class TestRuoloRelay(unittest.TestCase):
     # --- l'URL ------------------------------------------------------------
     def test_url_ws_scomposto(self):
         f = self.lua.globals().wsParseUrl
-        self.assertEqual(tuple(f(b"ws://127.0.0.1:9001/passotile/ws")),
-                         (b"127.0.0.1", 9001, b"/passotile/ws"))
+        self.assertEqual(tuple(f(b"ws://127.0.0.1:9001/ws")),
+                         (b"127.0.0.1", 9001, b"/ws"))
         self.assertEqual(tuple(f(b"ws://host/ws")), (b"host", 80, b"/ws"))
         # senza path: la RFC vuole almeno "/"
         self.assertEqual(tuple(f(b"ws://host"))[2], b"/")
@@ -266,19 +266,19 @@ class TestScriptDalSito(unittest.TestCase):
     che ha fatto nascere check_lua.py).
     """
 
-    TEMPLATE = os.path.join(RADICE, "web", "passotile-emulatore.lua")
+    TEMPLATE = os.path.join(RADICE, "web", "gen3-poke-multiplayer-emulatore.lua")
     PAYLOAD = os.path.join(RADICE, "build", "payload.bin")
 
     # Le stesse tre righe di app.js: un CONTRATTO con build.ps1.
     RIGHE = (
-        (r"^RELAY_URL\s*=.*$", 'RELAY_URL = "ws://host/passotile/ws"'),
+        (r"^RELAY_URL\s*=.*$", 'RELAY_URL = "ws://host/ws"'),
         (r"^RELAY_ROOM\s*=.*$", "RELAY_ROOM = 4242"),
         (r"^RELAY_PEER\s*=.*$", "RELAY_PEER = 0"),
     )
 
     def test_il_file_scaricato_compila_col_payload_intatto(self):
         if not os.path.isfile(self.TEMPLATE):
-            self.skipTest("manca web/passotile-emulatore.lua: lo genera "
+            self.skipTest("manca web/gen3-poke-multiplayer-emulatore.lua: lo genera "
                           "tools/prepara-sito-web.ps1 (o build.ps1 -LinkRole relay)")
         try:
             import lupa

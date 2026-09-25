@@ -16,7 +16,10 @@
 (function () {
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
-  var CHIAVE = "passotile.web";
+  var CHIAVE = "gen3pm.web";
+  // La chiave di prima del cambio di nome (2026-09-25): letta come ripiego, cosi'
+  // chi aveva gia' salvato stanza e peer li ritrova.
+  var CHIAVE_VECCHIA = "passotile.web";
   // IT / EN (2026-09-24): la lingua la decide la pagina (gioca.html o gioca-en.html),
   // qui si sceglie solo quale delle due frasi mostrare. Le righe tecniche che
   // arrivano dai moduli (bridge, device, multiboot) restano in italiano.
@@ -24,7 +27,7 @@
   function L(it, en) { return EN ? en : it; }
   var STATI_EN = { lotta: "battle", dialogo: "dialogue", zaino: "bag", squadra: "party" };
   function nomeStato(v) { var n = GbaSio.nomeStato(v); return EN && STATI_EN[n] ? STATI_EN[n] : n; }
-  var DEF = (window.PASSOTILE_DEFAULTS || {});
+  var DEF = (window.GEN3PM_DEFAULTS || {});
 
   var cfg = null;            // {relay, stanza, peer, timing, cavo}
   var dev = null;            // CelioDevice in passthrough (partita)
@@ -85,7 +88,7 @@
   /* --- impostazioni ------------------------------------------------------- */
   function caricaCfg() {
     var salvate = {};
-    try { salvate = JSON.parse(localStorage.getItem(CHIAVE) || "{}") || {}; } catch (e) { salvate = {}; }
+    try { salvate = JSON.parse(localStorage.getItem(CHIAVE) || localStorage.getItem(CHIAVE_VECCHIA) || "{}") || {}; } catch (e) { salvate = {}; }
     cfg = {
       relay: salvate.relay || DEF.relay || "",
       stanza: salvate.stanza || DEF.stanza || 1,
@@ -362,7 +365,7 @@
   // passano gia' di qui.
   var canalePos = null;
   try {
-    canalePos = new BroadcastChannel("passotile-posizioni");
+    canalePos = new BroadcastChannel("gen3pm-posizioni");
     // La mappa aperta DOPO il pannello chiede, e le si risponde subito invece
     // di lasciarla vuota fino al battito successivo.
     canalePos.onmessage = function (ev) { if (ev.data && ev.data.chiedo) inviaPosizioni(); };
@@ -393,8 +396,8 @@
   // Un modello per ROM (2026-09-24): Smeraldo italiano (BPEI) o Emerald inglese
   // USA/Europa (BPEE). I due script sono uguali tranne i simboli del gioco, e
   // ognuno rifiuta la ROM dell'altro con un messaggio chiaro.
-  var TEMPLATE_LUA = { it: "passotile-emulatore.lua", usa: "passotile-emulatore-usa.lua" };
-  var CHIAVE_ROM = "passotile.romlua";
+  var TEMPLATE_LUA = { it: "gen3-poke-multiplayer-emulatore.lua", usa: "gen3-poke-multiplayer-emulatore-usa.lua" };
+  var CHIAVE_ROM = "gen3pm.romlua";
   function romLua() { var s = $("rom-lua"); return s && s.value === "usa" ? "usa" : "it"; }
 
   function configuraLua(testo, url, stanza, peer) {
@@ -547,7 +550,7 @@
   }
 
   function apriMappa() {
-    window.open("mappa.html", "passotile-mappa");
+    window.open("mappa.html", "gen3pm-mappa");
     // La mappa chiede da sola appena parte; questo copre il caso in cui la
     // scheda fosse gia' aperta da prima.
     setTimeout(inviaPosizioni, 500);

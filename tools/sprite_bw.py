@@ -91,7 +91,7 @@ def specie_da_usare(tutte):
 
 def scarica(url):
     req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (passotile, strumento privato)",
+        "User-Agent": "Mozilla/5.0 (gen3-poke-multiplayer, strumento privato)",
         "Accept": "image/gif,image/*",
     })
     with urllib.request.urlopen(req, timeout=20) as r:
