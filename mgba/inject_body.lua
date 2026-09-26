@@ -1843,6 +1843,9 @@ local S = {
     -- vedono ATTRAVERSO l'amico), la bolla del surf che non rinasceva, e il
     -- cambio di avatar bici/surf che spariva invece di cambiare.
     blobScrubbed = 0x19C, resizeRespawns = 0x1A0,
+    -- 2026-09-26: la casella dei field effect rimessa com'era dopo ogni
+    -- passo dell'amico (le MN fuori lotta col Pokemon sbagliato).
+    fxArgsKept = 0x1A4,
 }
 
 local STATUS_NAMES = {
@@ -2278,10 +2281,10 @@ local function status()
     console:log(string.format(
         "[pulizia] remoti distrutti %d | fantasmi spazzati %d | scudo save %d "
         .. "| VIA ricevuti %d | RX buttati in letargo %d | eventi altra mappa %d "
-        .. "| passi implausibili %d",
+        .. "| passi implausibili %d | casella MN protetta %d",
         field("remotesRemoved"), field("remotesSwept"), field("stagingScrubs"),
         field("rxLeaves"), field("rxDrained"), field("rxOtherMap"),
-        field("rxImplausible")))
+        field("rxImplausible"), field("fxArgsKept")))
 
     console:log(string.format(
         "[carta ] chunk inviati %d, ricevuti %d | bitmap 0x%04X%s | aperture %d",

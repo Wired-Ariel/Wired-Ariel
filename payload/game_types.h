@@ -331,6 +331,7 @@
  * mappa. */
 #define sprite_oamAttr2(sp)     GAME_U16((sp) + 0x04)
 #define sprite_template(sp)     GAME_U32((sp) + 0x14)
+#define sprite_callback(sp)     GAME_U32((sp) + 0x1C)
 #define sprite_x(sp)            GAME_S16((sp) + 0x20)
 #define sprite_y(sp)            GAME_S16((sp) + 0x22)
 #define sprite_x2(sp)           GAME_S16((sp) + 0x24)

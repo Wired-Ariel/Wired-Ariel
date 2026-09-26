@@ -654,13 +654,19 @@ struct PayloadState
                          * quanto il suo remoto consuma e va capito perche'   */
     u32 slotsKnown;     /* +0x194 bitmask: di quali slot abbiamo notizie      */
     u32 slotsSpawned;   /* +0x198 bitmask: quali slot hanno l'avatar a schermo */
-    u32 blobScrubbed;   /* +0x1A0 id di bolla del surf STANTII trovati e
+    u32 blobScrubbed;   /* +0x19C id di bolla del surf STANTII trovati e
                          * azzerati: senza questo la bolla non rinasceva piu'
                          * dopo un cambio mappa o una lotta                  */
-    u32 resizeRespawns; /* +0x1A4 respawn immediati dopo un cambio di
+    u32 resizeRespawns; /* +0x1A0 respawn immediati dopo un cambio di
                          * dimensione dello sprite (bici, surf). Deve seguire
                          * gfxResizes: se gfxResizes sale e questo no,
                          * l'amico e' sparito invece di cambiare avatar      */
+    u32 fxArgsKept;     /* +0x1A4 frame in cui il GIOCO, muovendo l'avatar
+                         * dell'amico, ha scritto gFieldEffectArguments (erba
+                         * alta, orme, pozzanghere, salti) e RemoteSpriteCb
+                         * ha rimesso la casella com'era. Se l'amico cammina
+                         * nell'erba alta e resta 0, la guardia non morde e
+                         * la MN esce di nuovo col Pokemon sbagliato        */
 };
 
 __attribute__((section(".payload_state"), used))
@@ -811,6 +817,9 @@ struct Remote
      * g_rq (regione .lateclear, vedi sotto)                                */
     u32 qHead;
     u32 qTail;
+    /* la callback originale dello sprite dell'avatar, avvolta da
+     * RemoteSpriteCb (vedi GuardRemoteSprite); 0 = non ancora vista       */
+    void (*sprCb)(void *);
 };
 
 static struct Remote g_remotes[N_REMOTES];
@@ -2207,8 +2216,95 @@ static void SyncRemoteSurfBlob(struct Remote *r, u32 oe)
         DestroyRemoteSurfBlob(oe);
 }
 
+/* LA STESSA CASELLA, SCRITTA DAL GIOCO PER CONTO NOSTRO (2026-09-26, «ogni
+ * tanto la MN fuori lotta mostra un Pokemon buggato: negativo, MissingNo»).
+ *
+ * CreateRemoteSurfBlob ha chiuso le scritture NOSTRE su gFieldEffectArguments.
+ * Restavano quelle che il GIOCO fa muovendo l'avatar dell'amico: a ogni passo
+ * UpdateObjectEventCurrentMovement chiama DoGroundEffects_* (erba alta, orme
+ * nella sabbia, pozzanghere, acqua bassa, ombra e polvere dei salti), e ognuno
+ * scrive [0] = x del tile e FieldEffectStart (event_object_movement.c:7804 e
+ * seguenti). Nel gioco vero e' innocuo, perche' durante uno script gli NPC
+ * sono congelati. Il nostro no: FreezeObjectEvent salta chi ha un movimento
+ * in corso (:8144) e il movimento "tenuto" gira anche da congelati (:4934) -
+ * ed e' cosi' che l'amico continua a camminare mentre tu leggi un dialogo.
+ *
+ * Le MN pero' lasciano l'indice di squadra in [0] e lo rileggono DOPO,
+ * a frame di distanza:
+ *   - da script (albero, masso, Forza, Surf, Cascata, Sub, Forzasegreta):
+ *     `setfieldeffectargument 0, VAR_RESULT`, poi la domanda SI'/NO, poi
+ *     `dofieldeffect` (data/scripts/field_move_scripts.inc:7-14, surf.inc:5-10):
+ *     la finestra dura quanto ci metti a rispondere;
+ *   - dal menu squadra (Taglio, Spaccaroccia, Forza, Flash, Fossa...): la posa
+ *     del giocatore dura qualche frame prima di FLDEFF_FIELD_MOVE_SHOW_MON_INIT
+ *     (fldeff_rocksmash.c:57-86).
+ * Se in quella finestra l'amico fa un passo nell'erba, [0] diventa la sua x e
+ * FldEff_FieldMoveShowMonInit legge gPlayerParty[x] FUORI dalla squadra
+ * (field_effect.c:2588): specie a caso = MissingNo/punto di domanda, dati a
+ * caso = palette sbagliata (il "negativo"), checksum rotto = uovo. Ed e' lo
+ * stesso GetBoxMonData che marca "uovo cattivo" scrivendo tre bit in quella
+ * memoria: per x oltre 13 e' SaveBlock2/SaveBlock1 (vedi CreateRemoteSurfBlob).
+ *
+ * LA CURA e' la stessa della bolla, ma nel punto giusto: l'unico codice che
+ * scrive la casella per conto dell'amico e' la callback del SUO sprite (tutti
+ * i field effect dei passi partono e consumano gli argomenti dentro
+ * FieldEffectStart, nello stesso giro), quindi la si avvolge: si fotografano
+ * gli 8 argomenti, si chiama l'originale, si rimettono. Il gioco vede la
+ * casella come se l'amico non esistesse; l'erba sotto l'amico si muove
+ * lo stesso. Nessun simbolo nuovo: l'originale si legge dallo sprite. */
+#define FX_ARGS 8u
+
+static void RemoteSpriteCb(void *sprite)
+{
+    u32 save[FX_ARGS];
+    u32 i, changed = 0;
+    u32 oeId = (u16)sprite_data0((u32)sprite);   /* sObjEventId */
+    void (*cb)(void *) = 0;
+
+    for (i = 0; i < N_REMOTES; i++)
+        if (g_remotes[i].objectId == oeId)
+            cb = g_remotes[i].sprCb;
+    /* Nessun padrone: lo sprite non puo' essere piu' nostro (ForgetRemote e
+     * il respawn distruggono prima lo sprite). Non si chiama un puntatore
+     * che non sappiamo da dove venga. */
+    if (!cb)
+        return;
+
+    for (i = 0; i < FX_ARGS; i++)
+        save[i] = gFieldEffectArguments(i);
+    cb(sprite);
+    for (i = 0; i < FX_ARGS; i++)
+    {
+        changed |= gFieldEffectArguments(i) ^ save[i];
+        gFieldEffectArguments(i) = save[i];
+    }
+    if (changed)
+        BUMPF(fxArgsKept);
+}
+
+/* Si rifa' a ogni frame, perche' il gioco ricrea lo sprite dal template quando
+ * vuole (ritorno da una lotta, respawn): la callback tornata "del gioco" e' il
+ * segnale, e l'originale si riprende da li'. Per-slot, non globale: una
+ * callback catturata male non deve fermare anche gli altri amici. */
+static void GuardRemoteSprite(struct Remote *r, u32 oe)
+{
+    u32 spr, cur;
+    u32 mine = (u32)&RemoteSpriteCb | 1u;
+
+    if (oe_spriteId(oe) >= MAX_SPRITES)
+        return;
+    spr = Sprite(oe_spriteId(oe));
+    cur = sprite_callback(spr);
+    if (cur == mine || !cur)
+        return;
+    r->sprCb = (void (*)(void *))cur;
+    sprite_callback(spr) = mine;
+}
+
 /* Il giro della bolla, dal main loop (vedi CreateRemoteSurfBlob): stessa
- * disciplina di IndicatorTick, stessi controlli d'identita' sullo slot. */
+ * disciplina di IndicatorTick, stessi controlli d'identita' sullo slot.
+ * Dallo stesso giro si avvolge la callback dello sprite (GuardRemoteSprite):
+ * payload_cb1 gira prima di callback2, cioe' prima di AnimateSprites. */
 static void SurfBlobTick(void)
 {
     u32 i;
@@ -2225,6 +2321,7 @@ static void SurfBlobTick(void)
         oe = ObjectEvent(r->objectId);
         if (!oe_active(oe) || oe_localId(oe) != REMOTE_LID(i))
             continue;
+        GuardRemoteSprite(r, oe);
         SyncRemoteSurfBlob(r, oe);
     }
 }

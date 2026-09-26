@@ -272,6 +272,12 @@ Battle audio on the real-GBA build: after `.\build.ps1 -Syms it -WithSio` and `.
 mask (`sRegIE`) is never cut down in `REG_IE` - the cause of the broken battle music fixed on 2026-08-30.
 Parameters and criteria are in the file header.
 
+HM animation outside battle: `.\tools\prova-in-tre.ps1 -Rom <emerald-ita.gba> -Giocatori 2 -Banco <...>\mgba\banco_mn.lua`
+makes the friend's avatar jump in place 20 times and checks every frame that `gFieldEffectArguments`
+(where an HM keeps the party slot of the Pokémon using it) is never overwritten on the friend's behalf -
+the cause of the glitched / "negative" / MissingNo Pokémon in the HM animation, fixed on 2026-09-26.
+Verdict in `build\prova-in-tre\banco_mn.txt`.
+
 ---
 
 ## Hosting your own relay

@@ -273,6 +273,12 @@ Audio in lotta sulla build da GBA vero: dopo `.\build.ps1 -Syms it -WithSio` e `
 gioco (`sRegIE`) non venga mai ridotta in `REG_IE` - la causa della musica rotta in lotta corretta il
 2026-08-30. Parametri e criteri in testa al file.
 
+Animazione delle MN fuori lotta: `.\tools\prova-in-tre.ps1 -Rom <smeraldo-ita.gba> -Giocatori 2 -Banco <...>\mgba\banco_mn.lua`
+fa saltare sul posto l'avatar dell'amico 20 volte e controlla a ogni frame che `gFieldEffectArguments`
+(dove la MN tiene il posto in squadra del Pokémon che la usa) non venga mai sovrascritta per conto
+dell'amico - la causa del Pokémon buggato / «in negativo» / MissingNo nell'animazione delle MN,
+corretta il 2026-09-26. Verdetto in `build\prova-in-tre\banco_mn.txt`.
+
 ---
 
 ## Ospitare il proprio relay
